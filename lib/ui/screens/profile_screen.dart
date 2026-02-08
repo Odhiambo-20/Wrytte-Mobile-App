@@ -110,7 +110,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _launchUrl(String url) async {
     Uri uri;
 
-    // Add https:// if missing
     if (!url.startsWith('http://') && !url.startsWith('https://')) {
       uri = Uri.parse('https://$url');
     } else {
@@ -140,7 +139,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final hasContent = hasBio || hasLinks;
 
     if (!hasContent) {
-      return const SizedBox.shrink(); // Return empty widget if no content
+      return const SizedBox.shrink();
     }
 
     return Padding(
@@ -267,7 +266,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   children: [
                     const SizedBox(height: 30),
 
-                    // === AVATAR ===
+                    // AVATAR
                     Center(
                       child: Container(
                         width: 130,
@@ -293,7 +292,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                     const SizedBox(height: 16),
 
-                    // === NAME ===
+                    // NAME
                     Text(
                       name,
                       style: const TextStyle(
@@ -305,7 +304,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                     const SizedBox(height: 4),
 
-                    // === PHONE NUMBER (TAPPABLE) ===
+                    // PHONE NUMBER (TAPPABLE)
                     GestureDetector(
                       onTap: _showPhoneMenu,
                       child: Text(
@@ -319,12 +318,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                     const SizedBox(height: 15),
 
-                    // === INFO CARD (Dynamic Content) ===
+                    //  INFO CARD (Dynamic Content)
                     _buildInfoCard(),
 
                     const SizedBox(height: 25),
 
-                    // === HIGHLIGHTS ===
+                    //  HIGHLIGHTS
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 20),
                       child: Column(
@@ -346,7 +345,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                     const SizedBox(height: 40),
 
-                    // === ADD STORIE BUTTON ===
+                    // ADD STORIE BUTTON
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 40),
                       child: SizedBox(

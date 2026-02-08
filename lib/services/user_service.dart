@@ -1,4 +1,3 @@
-// user_service.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -179,7 +178,7 @@ class UserService {
   Future<List<Map<String, dynamic>>> searchUsersByName(String query) async {
     try {
       // For basic search, we'll get all users and filter locally
-      // For production, consider using Algolia or Elasticsearch
+      // For production, I will consider using Algolia or Elasticsearch
       final usersSnapshot =
           await _firestore
               .collection('users')

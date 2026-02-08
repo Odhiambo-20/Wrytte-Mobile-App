@@ -65,7 +65,7 @@ class ChatService {
           }
         }
 
-        // Also ensure chat is not archived for either user
+        // ensuring chat is not archived for either user
         updateData['isArchived'] = false;
         updateData['archivedAt'] = FieldValue.delete();
         updateData['archivedBy'] = FieldValue.delete();
@@ -80,7 +80,7 @@ class ChatService {
       return chatId;
     } catch (e) {
       // ignore: avoid_print
-      print('❌ Error creating/getting chat ID: $e');
+      print(' Error creating/getting chat ID: $e');
       rethrow;
     }
   }
@@ -96,10 +96,10 @@ class ChatService {
     try {
       final timestamp = FieldValue.serverTimestamp();
 
-      // First, ensure chat is restored for both users
+      // First, ensuring chat is restored for both users
       await _restoreChatForUsers(chatId, senderId, receiverId);
 
-      // Create the message document with optional reply data
+      // Creating the message document with optional reply data
       final messageData = {
         'text': text,
         'senderId': senderId,
@@ -111,20 +111,20 @@ class ChatService {
         if (replyData != null) 'replyTo': replyData,
       };
 
-      // Add message to messages subcollection
+      // Adding message to messages subcollection
       await _firestore
           .collection('chats')
           .doc(chatId)
           .collection('messages')
           .add(messageData);
 
-      // Update chat document with last message info
+      // Updating chat document with last message info
       await _firestore.collection('chats').doc(chatId).update({
         'lastMessage': text,
         'lastMessageTime': timestamp,
         'lastMessageSender': senderId,
         'lastMessageType': 'text',
-        // Ensure chat is not archived when sending new message
+        // Ensuring chat is not archived when sending new message
         'isArchived': false,
         'archivedAt': FieldValue.delete(),
         'archivedBy': FieldValue.delete(),
@@ -133,10 +133,10 @@ class ChatService {
       });
 
       // ignore: avoid_print
-      print('✅ Message sent successfully to chat: $chatId');
+      print(' Message sent successfully to chat: $chatId');
     } catch (e) {
       // ignore: avoid_print
-      print('❌ Error sending message: $e');
+      print(' Error sending message: $e');
       rethrow;
     }
   }
@@ -183,7 +183,7 @@ class ChatService {
         print('✅ Restored chat $chatId for users $user1 and $user2');
       }
     } catch (e) {
-      print('❌ Error restoring chat for users: $e');
+      print(' Error restoring chat for users: $e');
     }
   }
 
@@ -242,10 +242,10 @@ class ChatService {
       });
 
       // ignore: avoid_print
-      print('✅ Image message sent successfully to chat: $chatId');
+      print(' Image message sent successfully to chat: $chatId');
     } catch (e) {
       // ignore: avoid_print
-      print('❌ Error sending image message: $e');
+      print(' Error sending image message: $e');
       rethrow;
     }
   }
@@ -310,7 +310,7 @@ class ChatService {
       print('✅ Voice message sent successfully to chat: $chatId');
     } catch (e) {
       // ignore: avoid_print
-      print('❌ Error sending voice message: $e');
+      print(' Error sending voice message: $e');
       rethrow;
     }
   }
@@ -415,10 +415,10 @@ class ChatService {
 
       await batch.commit();
       print(
-        '✅ ${selectedMessages.length} message(s) forwarded to ${targetChatIds.length} chat(s)',
+        ' ${selectedMessages.length} message(s) forwarded to ${targetChatIds.length} chat(s)',
       );
     } catch (e) {
-      print('❌ Error forwarding messages: $e');
+      print(' Error forwarding messages: $e');
       rethrow;
     }
   }
@@ -666,16 +666,16 @@ class ChatService {
         }
 
         await messageRef.delete();
-        print('✅ Message deleted for everyone');
+        print(' Message deleted for everyone');
       } else {
         // Delete for me only - mark as deleted for this user
         await messageRef.update({
           'deletedFor': FieldValue.arrayUnion([userId]),
         });
-        print('✅ Message deleted for user $userId');
+        print(' Message deleted for user $userId');
       }
     } catch (e) {
-      print('❌ Error deleting message: $e');
+      print(' Error deleting message: $e');
       rethrow;
     }
   }
@@ -738,9 +738,9 @@ class ChatService {
         });
       }
 
-      print('✅ Message edited successfully');
+      print(' Message edited successfully');
     } catch (e) {
-      print('❌ Error editing message: $e');
+      print(' Error editing message: $e');
       rethrow;
     }
   }
@@ -792,9 +792,9 @@ class ChatService {
           .doc(messageId)
           .update({'isPinned': false, 'pinnedAt': FieldValue.delete()});
 
-      print('✅ Message unpinned successfully');
+      print(' Message unpinned successfully');
     } catch (e) {
-      print('❌ Error unpinning message: $e');
+      print(' Error unpinning message: $e');
       rethrow;
     }
   }
@@ -855,9 +855,9 @@ class ChatService {
       }
 
       await batch.commit();
-      print('✅ Message forwarded to ${targetChatIds.length} chats');
+      print(' Message forwarded to ${targetChatIds.length} chats');
     } catch (e) {
-      print('❌ Error forwarding message: $e');
+      print(' Error forwarding message: $e');
       rethrow;
     }
   }
@@ -942,9 +942,9 @@ class ChatService {
             'starredBy': isStarred ? userId : FieldValue.delete(),
           });
 
-      print('✅ Message ${isStarred ? 'starred' : 'unstarred'} successfully');
+      print(' Message ${isStarred ? 'starred' : 'unstarred'} successfully');
     } catch (e) {
-      print('❌ Error toggling star message: $e');
+      print(' Error toggling star message: $e');
       rethrow;
     }
   }
@@ -984,9 +984,9 @@ class ChatService {
             'lastReactionAt': FieldValue.serverTimestamp(),
           });
 
-      print('✅ Reacted to message with $emoji');
+      print(' Reacted to message with $emoji');
     } catch (e) {
-      print('❌ Error reacting to message: $e');
+      print(' Error reacting to message: $e');
       rethrow;
     }
   }
@@ -1005,9 +1005,9 @@ class ChatService {
           .doc(messageId)
           .update({'reactions.$userId': FieldValue.delete()});
 
-      print('✅ Reaction removed from message');
+      print(' Reaction removed from message');
     } catch (e) {
-      print('❌ Error removing reaction: $e');
+      print(' Error removing reaction: $e');
       rethrow;
     }
   }

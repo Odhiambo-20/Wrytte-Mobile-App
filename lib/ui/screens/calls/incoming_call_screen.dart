@@ -113,7 +113,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
         if (status == 'ended' || status == 'rejected') {
           _onCallEnded();
         } else if (status == 'accepted') {
-          // Call was accepted by the caller (unlikely but handle)
+          // Call was accepted by the caller
         }
       } else {
         _onCallEnded();
@@ -136,7 +136,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
 
   void _playRingtone() async {
     try {
-      // Play ringtone - you can add your ringtone file
+      // Play ringtone - to add my ringtone file
       // await _ringtonePlayer.play(AssetSource('audio/ringtone.mp3'));
 
       // Loop the ringtone
@@ -297,7 +297,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
             ),
           ),
 
-          // Battery indicator (simplified)
+          // Battery indicator
           const Row(
             children: [
               Icon(Icons.battery_std, color: Colors.white, size: 18),

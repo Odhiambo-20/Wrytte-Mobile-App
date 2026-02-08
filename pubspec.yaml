@@ -58,6 +58,8 @@ dependencies:
   flutter_webrtc: ^1.2.1
   camera: ^0.11.3
   rxdart: ^0.28.0
+  photo_manager: ^3.8.3
+  photo_manager_image_provider: ^2.2.0
 
 dev_dependencies:
   flutter_test:

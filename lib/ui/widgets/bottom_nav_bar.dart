@@ -30,7 +30,7 @@ class BottomNavBar extends StatelessWidget {
         onTap: onTap,
         iconSize: 28.0,
         items: [
-          // Shops — using PNG now
+          // Shops
           BottomNavigationBarItem(
             icon: Image.asset(
               'assets/svg/coin_icon.png',
@@ -95,7 +95,7 @@ class BottomNavBar extends StatelessWidget {
             label: 'Chats',
           ),
 
-          // Post — using PNG
+          // Post
           BottomNavigationBarItem(
             icon: Image.asset(
               'assets/svg/posts_icon.png',
@@ -119,7 +119,7 @@ class BottomNavBar extends StatelessWidget {
             label: 'Calls',
           ),
 
-          // Settings (unchanged)
+          // Settings
           BottomNavigationBarItem(
             icon: Icon(
               currentIndex == 4 ? Icons.settings : Icons.settings_outlined,

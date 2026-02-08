@@ -27,7 +27,7 @@ class _ChatsScreenState extends State<ChatsScreen> {
   final ContactService _contactService = ContactService();
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  // Use BehaviorSubject for shared streams
+  // Used BehaviorSubject for shared streams
   final BehaviorSubject<List<QueryDocumentSnapshot<Map<String, dynamic>>>>
   _chatsSubject =
       BehaviorSubject<List<QueryDocumentSnapshot<Map<String, dynamic>>>>();
@@ -175,7 +175,7 @@ class _ChatsScreenState extends State<ChatsScreen> {
         _contactsLoaded = true;
       });
 
-      print('✅ Loaded ${_contactNameCache.length} contact names from device');
+      print(' Loaded ${_contactNameCache.length} contact names from device');
     } catch (e) {
       print('⚠️ Error loading device contacts: $e');
       setState(() {
@@ -1129,7 +1129,6 @@ class _ChatsScreenState extends State<ChatsScreen> {
   }
 
   // Helper method to sort and filter chats
-  // In the _processChats method of ChatsScreen, update to filter out archived chats
   List<QueryDocumentSnapshot<Map<String, dynamic>>> _processChats(
     List<QueryDocumentSnapshot<Map<String, dynamic>>> chats,
     String currentUserId,
@@ -1336,7 +1335,7 @@ class _ChatsScreenState extends State<ChatsScreen> {
     ).then((_) {
       // Refresh chats when returning from message screen
       if (mounted) {
-        _initializeChats(); // This will refresh the stream and recalculate unread count
+        _initializeChats();
       }
     });
   }
@@ -1529,7 +1528,7 @@ class _ChatsScreenState extends State<ChatsScreen> {
     );
   }
 
-  // In ChatsScreen or your main screen
+  // In ChatsScreen or my main screen
   int calculateTotalUnreadCount(
     List<QueryDocumentSnapshot<Map<String, dynamic>>> chats,
   ) {
@@ -1586,7 +1585,7 @@ class _ChatsScreenState extends State<ChatsScreen> {
                       onArchive: _handleArchive,
                       onDelete: _handleDelete,
                     ),
-                    // REMOVE THE CONDITION - ALWAYS SHOW SEARCH BAR
+                    // ALWAYS SHOW SEARCH BAR
                     local_widgets.SearchBar(),
                     const TabBarSection(),
                   ],

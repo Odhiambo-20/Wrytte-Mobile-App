@@ -7,7 +7,6 @@ import 'package:wrytte/ui/screens/message_screen.dart';
 class SelectContactScreen extends StatefulWidget {
   const SelectContactScreen({super.key});
 
-  // Remove the static show method and use normal navigation instead
   @override
   State<SelectContactScreen> createState() => _SelectContactScreenState();
 }
@@ -93,7 +92,7 @@ class _SelectContactScreenState extends State<SelectContactScreen> {
     }
   }
 
-  /// GROUP CONTACTS BY FIRST LETTER (UNCHANGED LOGIC)
+  /// GROUP CONTACTS BY FIRST LETTER
   Map<String, List<Contact>> _groupByAlphabet(List<Contact> contacts) {
     final Map<String, List<Contact>> grouped = {};
     for (final contact in contacts) {

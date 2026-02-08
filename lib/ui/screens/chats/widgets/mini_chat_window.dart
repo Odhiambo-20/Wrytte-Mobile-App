@@ -6,6 +6,7 @@ import 'package:wrytte/components/user_avatar.dart';
 import 'package:wrytte/services/chat_service.dart';
 import 'package:wrytte/services/user_service.dart';
 import 'package:audioplayers/audioplayers.dart';
+import 'package:wrytte/ui/screens/message_screen.dart';
 
 class MiniChatWindow extends StatefulWidget {
   final String chatId;
@@ -17,10 +18,10 @@ class MiniChatWindow extends StatefulWidget {
   final Function(bool)? onPinChanged;
   final Function()? onDelete;
   final Function()? onBlock;
-  final Function(bool)? onArchiveChanged; // Added archive callback
+  final Function(bool)? onArchiveChanged;
 
   const MiniChatWindow({
-    Key? key,
+    super.key,
     required this.chatId,
     required this.otherUserId,
     required this.userName,
@@ -30,8 +31,8 @@ class MiniChatWindow extends StatefulWidget {
     this.onPinChanged,
     this.onDelete,
     this.onBlock,
-    this.onArchiveChanged, // Added archive parameter
-  }) : super(key: key);
+    this.onArchiveChanged,
+  });
 
   @override
   State<MiniChatWindow> createState() => _MiniChatWindowState();
@@ -154,7 +155,7 @@ class _MiniChatWindowState extends State<MiniChatWindow> {
     );
   }
 
-  /// 🔹 Archive Chat Functionality
+  /// Archive Chat Functionality
   Future<void> _archiveChat() async {
     final currentUserId = _auth.currentUser?.uid;
     if (currentUserId == null) return;
@@ -248,7 +249,7 @@ class _MiniChatWindowState extends State<MiniChatWindow> {
     }
   }
 
-  /// 🔹 Block User Functionality
+  /// Block User Functionality
   Future<void> _blockUser() async {
     final currentUserId = _auth.currentUser?.uid;
     if (currentUserId == null) return;
@@ -362,7 +363,7 @@ class _MiniChatWindowState extends State<MiniChatWindow> {
     }
   }
 
-  /// 🔹 Mute Functionality
+  /// Mute Functionality
   Future<void> _muteChat() async {
     final currentUserId = _auth.currentUser?.uid;
     if (currentUserId == null) return;
@@ -531,7 +532,7 @@ class _MiniChatWindowState extends State<MiniChatWindow> {
     }
   }
 
-  /// 🔹 Mark as Read Functionality
+  /// Mark as Read Functionality
   Future<void> _markAsRead() async {
     final currentUserId = _auth.currentUser?.uid;
     if (currentUserId == null) return;
@@ -547,7 +548,7 @@ class _MiniChatWindowState extends State<MiniChatWindow> {
     }
   }
 
-  /// 🔹 Pin/Unpin Functionality
+  /// Pin/Unpin Functionality
   Future<void> _pinChat() async {
     final currentUserId = _auth.currentUser?.uid;
     if (currentUserId == null) return;
@@ -592,7 +593,7 @@ class _MiniChatWindowState extends State<MiniChatWindow> {
     );
   }
 
-  /// 🔹 ANDROID STYLE ACTION MENU
+  /// ANDROID STYLE ACTION MENU
   Widget _buildTopActionMenu() {
     return Column(
       children: [
@@ -654,85 +655,102 @@ class _MiniChatWindowState extends State<MiniChatWindow> {
           ),
 
           Center(
-            child: Container(
-              width: MediaQuery.of(context).size.width * 0.95,
-              constraints: BoxConstraints(
-                // ADDED: Set maximum width
-                maxWidth:
-                    500, // Maximum width to prevent being too wide on tablets
-              ),
-              height: MediaQuery.of(context).size.height * 0.75,
-              decoration: BoxDecoration(
-                color: Colors.black,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Column(
-                children: [
-                  // Android action menu
-                  _buildTopActionMenu(),
-
-                  // Header
-                  Container(
-                    height: 60,
-                    decoration: BoxDecoration(color: Colors.grey[900]),
-                    child: Center(
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          UserAvatar(
-                            size: 36,
-                            imageUrl: widget.userAvatar,
-                            name: widget.userName,
-                          ),
-                          const SizedBox(width: 12),
-                          Text(
-                            widget.userName,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+            child: GestureDetector(
+              onTap: () {
+                // Navigate to MessageScreen when mini window is tapped
+                Navigator.pop(context); // Close the mini window first
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder:
+                        (context) => MessageScreen(
+                          name: widget.userName,
+                          receiverId: widget.otherUserId,
+                          avatarUrl: widget.userAvatar,
+                          chatId: widget.chatId,
+                          isOnline: false,
+                        ),
                   ),
+                );
+              },
+              child: Container(
+                width: MediaQuery.of(context).size.width * 0.95,
+                constraints: BoxConstraints(maxWidth: 500),
+                height: MediaQuery.of(context).size.height * 0.75,
+                decoration: BoxDecoration(
+                  color: Colors.black,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Column(
+                  children: [
+                    // Android action menu
+                    _buildTopActionMenu(),
 
-                  // Messages
-                  Expanded(
-                    child: Container(
-                      decoration: const BoxDecoration(
-                        image: DecorationImage(
-                          image: AssetImage("assets/images/chat_wallpaper.jpg"),
-                          fit: BoxFit.cover,
+                    // Header
+                    Container(
+                      height: 60,
+                      decoration: BoxDecoration(color: Colors.grey[900]),
+                      child: Center(
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            UserAvatar(
+                              size: 36,
+                              imageUrl: widget.userAvatar,
+                              name: widget.userName,
+                            ),
+                            const SizedBox(width: 12),
+                            Text(
+                              widget.userName,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      child: StreamBuilder<QuerySnapshot>(
-                        stream: _messagesStream,
-                        builder: (context, snapshot) {
-                          if (!snapshot.hasData) {
-                            return const Center(
-                              child: CircularProgressIndicator(
-                                color: Colors.white,
-                              ),
+                    ),
+
+                    // Messages
+                    Expanded(
+                      child: Container(
+                        decoration: const BoxDecoration(
+                          image: DecorationImage(
+                            image: AssetImage(
+                              "assets/images/chat_wallpaper.jpg",
+                            ),
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                        child: StreamBuilder<QuerySnapshot>(
+                          stream: _messagesStream,
+                          builder: (context, snapshot) {
+                            if (!snapshot.hasData) {
+                              return const Center(
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                ),
+                              );
+                            }
+
+                            final messages = snapshot.data!.docs;
+
+                            return ListView.builder(
+                              controller: _scrollController,
+                              padding: const EdgeInsets.all(16),
+                              itemCount: messages.length,
+                              itemBuilder:
+                                  (context, index) =>
+                                      _buildMessageItem(messages[index]),
                             );
-                          }
-
-                          final messages = snapshot.data!.docs;
-
-                          return ListView.builder(
-                            controller: _scrollController,
-                            padding: const EdgeInsets.all(16),
-                            itemCount: messages.length,
-                            itemBuilder:
-                                (context, index) =>
-                                    _buildMessageItem(messages[index]),
-                          );
-                        },
+                          },
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),

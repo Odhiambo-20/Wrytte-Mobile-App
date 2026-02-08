@@ -53,7 +53,7 @@ class MediaPickerBottomSheet extends StatelessWidget {
               physics: const NeverScrollableScrollPhysics(),
               mainAxisSpacing: 16,
               crossAxisSpacing: 8,
-              childAspectRatio: 0.85, // Slightly adjusted ratio
+              childAspectRatio: 0.85,
               children: [
                 _buildOptionItem(
                   icon: Icons.photo_library_outlined,
@@ -100,25 +100,18 @@ class MediaPickerBottomSheet extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 58, // Slightly reduced
+            width: 58,
             height: 58,
             decoration: BoxDecoration(
               color: const Color(0xFF0C1D2C),
               borderRadius: BorderRadius.circular(29),
             ),
-            child: Icon(
-              icon,
-              color: Colors.white,
-              size: 26,
-            ), // Slightly reduced
+            child: Icon(icon, color: Colors.white, size: 26),
           ),
-          const SizedBox(height: 6), // Slightly reduced
+          const SizedBox(height: 6),
           Text(
             label,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 11, // Slightly smaller
-            ),
+            style: const TextStyle(color: Colors.white, fontSize: 11),
             textAlign: TextAlign.center,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,

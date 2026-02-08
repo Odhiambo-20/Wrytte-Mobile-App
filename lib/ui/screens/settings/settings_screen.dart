@@ -9,18 +9,18 @@ class SettingsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black, // dark navy background
+      backgroundColor: Colors.black,
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ===== AppBar Section =====
+              // AppBar Section
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const SizedBox(width: 48), // balance the QR icon spacing
+                  const SizedBox(width: 48),
                   const Text(
                     "Settings",
                     style: TextStyle(
@@ -40,7 +40,7 @@ class SettingsScreen extends StatelessWidget {
               ),
               const SizedBox(height: 20),
 
-              // ===== Profile Section (real data) =====
+              // Profile Section
               FutureBuilder<DocumentSnapshot>(
                 future:
                     FirebaseFirestore.instance
@@ -167,7 +167,7 @@ class SettingsScreen extends StatelessWidget {
 
               const SizedBox(height: 20),
 
-              // ===== First Card =====
+              // First Card
               _buildSettingsCard(
                 context,
                 items: [
@@ -182,7 +182,7 @@ class SettingsScreen extends StatelessWidget {
 
               const SizedBox(height: 20),
 
-              // ===== Second Card =====
+              //  Second Card
               _buildSettingsCard(
                 context,
                 items: [
@@ -198,7 +198,7 @@ class SettingsScreen extends StatelessWidget {
                 ],
               ),
 
-              const SizedBox(height: 60), // spacing for bottom nav
+              const SizedBox(height: 60),
             ],
           ),
         ),
@@ -206,7 +206,7 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
-  // ===== Helper Widget for Cards =====
+  // Helper Widget for Cards
   Widget _buildSettingsCard(
     BuildContext context, {
     required List<_SettingsItem> items,
@@ -267,7 +267,7 @@ class SettingsScreen extends StatelessWidget {
   }
 }
 
-// ===== Data Holder for Settings Item =====
+// Data Holder for Settings Item
 class _SettingsItem {
   final String title;
   final IconData icon;

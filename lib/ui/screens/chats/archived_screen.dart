@@ -48,7 +48,7 @@ class _ArchivedScreenState extends State<ArchivedScreen> {
           _isLoading = false;
         });
       } catch (e) {
-        print('❌ Error initializing archived chats: $e');
+        print(' Error initializing archived chats: $e');
         setState(() {
           _archivedChatsStream = null;
           _isLoading = false;
@@ -75,7 +75,7 @@ class _ArchivedScreenState extends State<ArchivedScreen> {
         _contactsLoaded = true;
       });
 
-      print('✅ Loaded ${_contactNameCache.length} contact names from device');
+      print(' Loaded ${_contactNameCache.length} contact names from device');
     } catch (e) {
       print('⚠️ Error loading device contacts: $e');
       setState(() {
@@ -196,7 +196,7 @@ class _ArchivedScreenState extends State<ArchivedScreen> {
 
       _exitSelectionMode();
     } catch (e) {
-      print('❌ Error unarchiving chats: $e');
+      print(' Error unarchiving chats: $e');
       _showSnackBar('Failed to unarchive chats', Colors.red);
     }
   }
@@ -326,7 +326,7 @@ class _ArchivedScreenState extends State<ArchivedScreen> {
 
       _exitSelectionMode();
     } catch (e) {
-      print('❌ Error deleting chats: $e');
+      print(' Error deleting chats: $e');
       _showSnackBar('Failed to delete chats', Colors.red);
     }
   }

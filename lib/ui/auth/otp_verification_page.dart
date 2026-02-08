@@ -36,7 +36,7 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
     _currentVerificationId = widget.verificationId;
     _startResendTimer();
 
-    // Add a timeout for verification (5 minutes)
+    // a timeout for verification (5 minutes)
     Future.delayed(const Duration(minutes: 5), () {
       if (mounted && _timer != null) {
         _timer?.cancel();

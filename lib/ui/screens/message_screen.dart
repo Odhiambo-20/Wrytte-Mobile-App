@@ -5,10 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:wrytte/components/message_components/advanced_media_picker.dart';
 import 'package:wrytte/components/message_components/message_bubble.dart';
 import 'package:wrytte/components/message_components/message_input_field.dart';
 import 'package:wrytte/components/message_components/reply_preview.dart';
-import 'package:wrytte/components/message_components/media_picker_bottom_sheet.dart';
 import 'package:wrytte/components/message_components/emoji_picker_widget.dart';
 import 'package:wrytte/components/message_components/voice_recorder_widget.dart';
 import 'package:wrytte/components/message_components/message_screen_app_bar.dart';
@@ -57,11 +57,9 @@ class _MessageScreenState extends State<MessageScreen> {
   bool _hasMessages = false;
   bool _isSending = false;
 
-  // Enhanced state management
   Map<String, dynamic>? _replyingToMessage;
   final GlobalKey<AnimatedListState> _listKey = GlobalKey<AnimatedListState>();
 
-  // New feature states
   bool _showEmojiPicker = false;
   bool _showVoiceRecorder = false;
 
@@ -74,6 +72,13 @@ class _MessageScreenState extends State<MessageScreen> {
 
   // Pinned message state
   DocumentSnapshot? _pinnedMessage;
+
+  // Track if we should scroll to bottom
+  bool _shouldScrollToBottom = true;
+
+  // Editing state
+  String? _editingMessageId;
+  Map<String, dynamic>? _editingMessageData;
 
   @override
   void initState() {
@@ -130,7 +135,7 @@ class _MessageScreenState extends State<MessageScreen> {
     final messageText = _controller.text.trim();
 
     try {
-      // FIRST: Get or create chat ID - THIS WILL AUTO-RESTORE IF DELETED
+      // Get or create chat ID - THIS WILL AUTO-RESTORE IF DELETED
       final chatId = await _chatService.getOrCreateChatId(
         _auth.currentUser!.uid,
         widget.receiverId,
@@ -141,7 +146,7 @@ class _MessageScreenState extends State<MessageScreen> {
         _currentChatId = chatId;
       });
 
-      // Set up messages stream if not already set
+      // Set up messages stream if not already
       if (_messagesStream == null) {
         setState(() {
           _messagesStream = _chatService.getMessages(chatId);
@@ -172,7 +177,7 @@ class _MessageScreenState extends State<MessageScreen> {
         replyData: replyData,
       );
 
-      print('✅ Message sent successfully to chat: $chatId');
+      print(' Message sent successfully to chat: $chatId');
 
       if (_replyingToMessage != null) {
         _cancelReply();
@@ -184,7 +189,7 @@ class _MessageScreenState extends State<MessageScreen> {
       // Mark messages as read after sending
       await _chatService.markMessagesAsRead(chatId, _auth.currentUser!.uid);
     } catch (e) {
-      print('❌ Error sending message: $e');
+      print(' Error sending message: $e');
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -217,7 +222,7 @@ class _MessageScreenState extends State<MessageScreen> {
       if (image != null) {
         final File imageFile = File(image.path);
 
-        // FIRST: Get or create chat ID - THIS WILL AUTO-RESTORE IF DELETED
+        //Get or create chat ID - THIS WILL AUTO-RESTORE IF DELETED
         final chatId = await _chatService.getOrCreateChatId(
           _auth.currentUser!.uid,
           widget.receiverId,
@@ -269,7 +274,7 @@ class _MessageScreenState extends State<MessageScreen> {
         await _chatService.markMessagesAsRead(chatId, _auth.currentUser!.uid);
       }
     } catch (e) {
-      print('❌ Error picking image: $e');
+      print(' Error picking image: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Failed to send image: $e'),
@@ -283,10 +288,9 @@ class _MessageScreenState extends State<MessageScreen> {
   Future<void> _sendVoiceMessage(String audioPath) async {
     try {
       final File audioFile = File(audioPath);
-      final Duration duration =
-          Duration.zero; // You would need to get actual duration
+      final Duration duration = Duration.zero;
 
-      // FIRST: Get or create chat ID - THIS WILL AUTO-RESTORE IF DELETED
+      // Get or create chat ID - THIS WILL AUTO-RESTORE IF DELETED
       final chatId = await _chatService.getOrCreateChatId(
         _auth.currentUser!.uid,
         widget.receiverId,
@@ -338,7 +342,7 @@ class _MessageScreenState extends State<MessageScreen> {
       // Mark messages as read after sending
       await _chatService.markMessagesAsRead(chatId, _auth.currentUser!.uid);
     } catch (e) {
-      print('❌ Error sending voice message: $e');
+      print(' Error sending voice message: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Failed to send voice message: $e'),
@@ -357,26 +361,89 @@ class _MessageScreenState extends State<MessageScreen> {
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder:
-          (context) => MediaPickerBottomSheet(
-            onCameraPressed: () {
-              Navigator.pop(context);
-              _pickImage(ImageSource.camera);
-            },
-            onGalleryPressed: () {
-              Navigator.pop(context);
-              _pickImage(ImageSource.gallery);
+          (context) => AdvancedMediaPicker(
+            onImageSelected: (imageFile) async {
+              try {
+                final chatId = await _chatService.getOrCreateChatId(
+                  _auth.currentUser!.uid,
+                  widget.receiverId,
+                );
+
+                setState(() {
+                  _currentChatId = chatId;
+                });
+
+                if (_messagesStream == null) {
+                  setState(() {
+                    _messagesStream = _chatService.getMessages(chatId);
+                    _pinnedMessageStream = _chatService.getPinnedMessageStream(
+                      chatId,
+                    );
+                  });
+                }
+
+                final Map<String, dynamic>? replyData =
+                    _replyingToMessage != null
+                        ? {
+                          'replyToMessageId': _replyingToMessage!['id'],
+                          'replyToText': _replyingToMessage!['text'] ?? 'Photo',
+                          'replyToSenderId': _replyingToMessage!['senderId'],
+                          'replyToSenderName':
+                              _replyingToMessage!['senderId'] ==
+                                      _auth.currentUser!.uid
+                                  ? 'You'
+                                  : widget.name,
+                          'replyToMessageType':
+                              _replyingToMessage!['messageType'] ?? 'text',
+                        }
+                        : null;
+
+                await _chatService.sendImageMessage(
+                  chatId,
+                  imageFile,
+                  _auth.currentUser!.uid,
+                  widget.receiverId,
+                  replyData: replyData,
+                );
+
+                if (_replyingToMessage != null) {
+                  _cancelReply();
+                }
+
+                _scrollToBottom();
+                await _chatService.markMessagesAsRead(
+                  chatId,
+                  _auth.currentUser!.uid,
+                );
+              } catch (e) {
+                print(' Error sending image: $e');
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Failed to send image: $e'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
             },
             onDocumentPressed: () {
-              Navigator.pop(context);
               // TODO: Implement document picker
+              print('Document picker pressed');
             },
             onLocationPressed: () {
-              Navigator.pop(context);
               // TODO: Implement location sharing
+              print('Location sharing pressed');
             },
             onContactPressed: () {
-              Navigator.pop(context);
               // TODO: Implement contact sharing
+              print('Contact sharing pressed');
+            },
+            onAudioPressed: () {
+              // TODO: Implement audio picker
+              print('Audio picker pressed');
+            },
+            onPollPressed: () {
+              // TODO: Implement poll creation
+              print('Poll creation pressed');
             },
           ),
     );
@@ -421,6 +488,15 @@ class _MessageScreenState extends State<MessageScreen> {
   void _cancelReply() {
     setState(() {
       _replyingToMessage = null;
+    });
+  }
+
+  // Cancel editing
+  void _cancelEditing() {
+    setState(() {
+      _editingMessageId = null;
+      _editingMessageData = null;
+      _controller.clear();
     });
   }
 
@@ -472,6 +548,11 @@ class _MessageScreenState extends State<MessageScreen> {
     bool isSenderMessage,
     Map<String, dynamic> messageData,
   ) {
+    // Prevent auto-scroll when selecting messages
+    setState(() {
+      _shouldScrollToBottom = false;
+    });
+
     setState(() {
       if (_selectedMessageIds.contains(messageId)) {
         _selectedMessageIds.remove(messageId);
@@ -492,6 +573,9 @@ class _MessageScreenState extends State<MessageScreen> {
         _hasSenderMessagesSelected = false;
         _hasReceiverMessagesSelected = false;
         _selectedMessagesData.clear();
+
+        // Re-enable auto-scroll when selection is cleared
+        _shouldScrollToBottom = true;
       } else {
         _isSelectionMode = true;
 
@@ -517,6 +601,11 @@ class _MessageScreenState extends State<MessageScreen> {
     bool isSenderMessage,
     Map<String, dynamic> messageData,
   ) {
+    // Prevent auto-scroll when entering selection mode
+    setState(() {
+      _shouldScrollToBottom = false;
+    });
+
     setState(() {
       _selectedMessageIds.add(firstMessageId);
       _selectedMessagesData[firstMessageId] = messageData;
@@ -536,6 +625,9 @@ class _MessageScreenState extends State<MessageScreen> {
       _isSelectionMode = false;
       _hasSenderMessagesSelected = false;
       _hasReceiverMessagesSelected = false;
+
+      // Re-enable auto-scroll when selection is cleared
+      _shouldScrollToBottom = true;
     });
   }
 
@@ -557,14 +649,57 @@ class _MessageScreenState extends State<MessageScreen> {
     }
   }
 
+  // Handle edit action
   void _handleEditAction() {
     if (_selectedMessageIds.isNotEmpty) {
       final messageId = _selectedMessageIds.first;
       final messageData = _selectedMessagesData[messageId];
       if (messageData != null) {
-        final currentText = messageData['text'] ?? '';
-        _showEditDialog(messageId, currentText);
+        setState(() {
+          _editingMessageId = messageId;
+          _editingMessageData = messageData;
+          _controller.text = messageData['text'] ?? '';
+        });
+        _clearSelection();
       }
+    }
+  }
+
+  // Save edited message
+  void _saveEditedMessage() async {
+    if (_editingMessageId == null ||
+        _controller.text.trim().isEmpty ||
+        _currentChatId == null) {
+      return;
+    }
+
+    try {
+      await _chatService.editMessage(
+        _currentChatId!,
+        _editingMessageId!,
+        _controller.text.trim(),
+        _auth.currentUser!.uid,
+      );
+
+      setState(() {
+        _editingMessageId = null;
+        _editingMessageData = null;
+      });
+
+      _controller.clear();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Message edited'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to edit message: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 
@@ -648,12 +783,6 @@ class _MessageScreenState extends State<MessageScreen> {
               'Delete message',
               style: TextStyle(color: Colors.white),
             ),
-            content: Text(
-              hasOnlyReceiverMessages
-                  ? 'Delete for me?'
-                  : 'Delete for everyone?',
-              style: const TextStyle(color: Colors.grey),
-            ),
             actions: [
               if (!hasOnlyReceiverMessages)
                 TextButton(
@@ -722,76 +851,6 @@ class _MessageScreenState extends State<MessageScreen> {
     }
   }
 
-  // Edit dialog
-  void _showEditDialog(String messageId, String currentText) {
-    final editController = TextEditingController(text: currentText);
-
-    showDialog(
-      context: context,
-      builder:
-          (context) => AlertDialog(
-            backgroundColor: Colors.grey[900],
-            title: const Text(
-              'Edit message',
-              style: TextStyle(color: Colors.white),
-            ),
-            content: TextField(
-              controller: editController,
-              style: const TextStyle(color: Colors.white),
-              maxLines: 3,
-              decoration: const InputDecoration(
-                hintText: 'Edit your message...',
-                hintStyle: TextStyle(color: Colors.grey),
-                border: OutlineInputBorder(),
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text(
-                  'Cancel',
-                  style: TextStyle(color: Colors.lightBlue),
-                ),
-              ),
-              TextButton(
-                onPressed: () async {
-                  final newText = editController.text.trim();
-                  if (newText.isNotEmpty && _currentChatId != null) {
-                    try {
-                      await _chatService.editMessage(
-                        _currentChatId!,
-                        messageId,
-                        newText,
-                        _auth.currentUser!.uid,
-                      );
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Message edited'),
-                          backgroundColor: Colors.green,
-                        ),
-                      );
-                      Navigator.pop(context);
-                      _clearSelection();
-                    } catch (e) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Failed to edit message: $e'),
-                          backgroundColor: Colors.red,
-                        ),
-                      );
-                    }
-                  }
-                },
-                child: const Text(
-                  'Save',
-                  style: TextStyle(color: Colors.lightBlue),
-                ),
-              ),
-            ],
-          ),
-    );
-  }
-
   // Voice call initiation
   void _initiateVoiceCall() async {
     try {
@@ -800,8 +859,8 @@ class _MessageScreenState extends State<MessageScreen> {
 
       final callId = await callService.initiateCall(
         callerId: currentUser.uid,
-        callerName: 'You', // You might want to get current user's name
-        callerAvatar: '', // Add current user's avatar
+        callerName: 'You',
+        callerAvatar: '',
         receiverId: widget.receiverId,
         receiverName: widget.name,
         receiverAvatar: widget.avatarUrl ?? '',
@@ -831,7 +890,7 @@ class _MessageScreenState extends State<MessageScreen> {
     }
   }
 
-  // WhatsApp-style date formatting
+  // date formatting
   String _formatDateHeader(DateTime messageTime) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
@@ -990,9 +1049,12 @@ class _MessageScreenState extends State<MessageScreen> {
       });
     }
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _scrollToBottom();
-    });
+    // Only scroll to bottom if we should
+    if (_shouldScrollToBottom) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _scrollToBottom();
+      });
+    }
 
     final groupedMessages = _groupMessagesByDate(messages);
 
@@ -1028,47 +1090,6 @@ class _MessageScreenState extends State<MessageScreen> {
                 },
                 currentUserId: _auth.currentUser!.uid,
                 otherUserName: widget.name,
-              ),
-            ),
-
-          if (_hasMessages)
-            Positioned(
-              top: _pinnedMessage != null ? 70 : 8,
-              left: 0,
-              right: 0,
-              child: Container(
-                margin: const EdgeInsets.symmetric(horizontal: 16),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.grey[800]?.withOpacity(0.9),
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.2),
-                      blurRadius: 4,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.lock_outline, color: Colors.grey[300], size: 12),
-                    const SizedBox(width: 6),
-                    Text(
-                      "End-to-end encrypted",
-                      style: TextStyle(
-                        color: Colors.grey[300],
-                        fontSize: 10,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
               ),
             ),
         ],
@@ -1357,30 +1378,15 @@ class _MessageScreenState extends State<MessageScreen> {
     );
   }
 
-  void _onMenuSelected(String value) {
-    switch (value) {
-      case 'view_contact':
-        print('View contact tapped');
-        break;
-      case 'media':
-        print('Media, links, and docs tapped');
-        break;
-      case 'search':
-        print('Search tapped');
-        break;
-      case 'mute':
-        print('Mute notifications tapped');
-        break;
-      case 'wallpaper':
-        print('Wallpaper tapped');
-        break;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: _hideEmojiPicker,
+      onTap: () {
+        _hideEmojiPicker();
+        if (_editingMessageId != null) {
+          _cancelEditing();
+        }
+      },
       onHorizontalDragEnd: (details) {
         if (details.primaryVelocity != null && details.primaryVelocity! > 0) {
           Navigator.pop(context);
@@ -1408,7 +1414,7 @@ class _MessageScreenState extends State<MessageScreen> {
                   isOnline: widget.isOnline,
                   onBackPressed: () => Navigator.pop(context),
                   onVideoCallPressed: () {
-                    // You can implement video call functionality here later
+                    // TODO: Implement video call functionality
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
                         content: Text('Video call functionality coming soon!'),
@@ -1416,7 +1422,6 @@ class _MessageScreenState extends State<MessageScreen> {
                     );
                   },
                   onVoiceCallPressed: _initiateVoiceCall,
-                  onMenuSelected: _onMenuSelected,
                 ),
         body: Column(
           children: [
@@ -1450,6 +1455,37 @@ class _MessageScreenState extends State<MessageScreen> {
 
             Expanded(child: _buildBody()),
 
+            // Show "Editing message" indicator when editing
+            if (_editingMessageId != null && _editingMessageData != null)
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
+                color: Colors.blue.withOpacity(0.1),
+                child: Row(
+                  children: [
+                    Icon(Icons.edit_outlined, color: Colors.blue, size: 16),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Editing message',
+                        style: TextStyle(
+                          color: Colors.blue,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      icon: Icon(Icons.close, size: 16),
+                      onPressed: _cancelEditing,
+                      padding: EdgeInsets.zero,
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ],
+                ),
+              ),
+
             // Reply preview widget
             if (_replyingToMessage != null)
               ReplyPreview(
@@ -1473,8 +1509,7 @@ class _MessageScreenState extends State<MessageScreen> {
                 },
               )
             else
-            // Message input field (only show when not in selection mode)
-            if (!_isSelectionMode)
+              // Message input field should always show
               MessageInputField(
                 controller: _controller,
                 onSend: _sendMessage,
@@ -1484,6 +1519,10 @@ class _MessageScreenState extends State<MessageScreen> {
                 onVoiceNotePressed: _toggleVoiceRecorder,
                 showEmojiPicker: _showEmojiPicker,
                 showVoiceRecorder: _showVoiceRecorder,
+                // Editing properties
+                isEditing: _editingMessageId != null,
+                onSaveEdit: _saveEditedMessage,
+                onCancelEdit: _cancelEditing,
               ),
 
             // Emoji picker

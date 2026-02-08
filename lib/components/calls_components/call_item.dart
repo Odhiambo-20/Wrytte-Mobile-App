@@ -1,5 +1,3 @@
-// lib/components/call_item.dart
-
 import 'package:flutter/material.dart';
 import 'package:wrytte/components/user_avatar.dart';
 

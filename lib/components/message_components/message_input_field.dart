@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/svg.dart';
 import 'dart:async';
+import 'dart:math' as math;
 
 class MessageInputField extends StatefulWidget {
   final TextEditingController controller;
@@ -11,6 +12,9 @@ class MessageInputField extends StatefulWidget {
   final VoidCallback onVoiceNotePressed;
   final bool showEmojiPicker;
   final bool showVoiceRecorder;
+  final bool isEditing;
+  final VoidCallback onSaveEdit;
+  final VoidCallback onCancelEdit;
 
   const MessageInputField({
     super.key,
@@ -22,6 +26,9 @@ class MessageInputField extends StatefulWidget {
     required this.onVoiceNotePressed,
     this.showEmojiPicker = false,
     this.showVoiceRecorder = false,
+    this.isEditing = false,
+    required this.onSaveEdit,
+    required this.onCancelEdit,
   });
 
   @override
@@ -45,6 +52,10 @@ class _MessageInputFieldState extends State<MessageInputField>
   Timer? _recordingTimer;
   double _slideOffset = 0.0;
   double _verticalSlideOffset = 0.0;
+
+  // Store the starting position of the long press
+  Offset? _recordStartPosition;
+
   AnimationController? _micPulseController;
   AnimationController? _slideArrowController;
   AnimationController? _lockSlideController;
@@ -100,10 +111,29 @@ class _MessageInputFieldState extends State<MessageInputField>
   @override
   void didUpdateWidget(covariant MessageInputField oldWidget) {
     super.didUpdateWidget(oldWidget);
+
     if (widget.showEmojiPicker != oldWidget.showEmojiPicker) {
       setState(() {
         _emojiPickerOpen = widget.showEmojiPicker;
       });
+    }
+
+    // Focus when starting to edit
+    if (widget.isEditing &&
+        !oldWidget.isEditing &&
+        widget.controller.text.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _focusNode.requestFocus();
+        // Move cursor to the end
+        widget.controller.selection = TextSelection.fromPosition(
+          TextPosition(offset: widget.controller.text.length),
+        );
+      });
+    }
+
+    // Clear focus when canceling edit
+    if (!widget.isEditing && oldWidget.isEditing) {
+      _focusNode.unfocus();
     }
   }
 
@@ -161,7 +191,11 @@ class _MessageInputFieldState extends State<MessageInputField>
 
   void _handleSend() {
     if (widget.controller.text.trim().isNotEmpty) {
-      widget.onSend();
+      if (widget.isEditing) {
+        widget.onSaveEdit();
+      } else {
+        widget.onSend();
+      }
       widget.controller.clear();
       setState(() {
         _hasText = false;
@@ -202,6 +236,7 @@ class _MessageInputFieldState extends State<MessageInputField>
       _recordingSeconds = 0;
       _slideOffset = 0.0;
       _verticalSlideOffset = 0.0;
+      _recordStartPosition = null;
     });
   }
 
@@ -284,26 +319,28 @@ class _MessageInputFieldState extends State<MessageInputField>
     }
   }
 
+  // Store the starting position when long press begins
   void _onVoiceButtonLongPressStart(LongPressStartDetails details) {
-    if (!_hasText && !_showVideoIcon) {
+    if (!_hasText && !_showVideoIcon && !widget.isEditing) {
+      _recordStartPosition = details.globalPosition;
       _startRecording();
     }
   }
 
+  // Calculate offset based on the starting position - THIS IS THE KEY
   void _onVoiceButtonLongPressMoveUpdate(LongPressMoveUpdateDetails details) {
-    if (!_hasText && !_showVideoIcon && _isRecording && !_isLocked) {
-      final RenderBox renderBox = context.findRenderObject() as RenderBox;
-      final localPosition = renderBox.globalToLocal(details.globalPosition);
-
-      // Calculate offset relative to the starting point
-      final startX =
-          renderBox.size.width - 50; // Approximate starting X position
-      final deltaX = localPosition.dx - startX;
-      final deltaY = localPosition.dy - 52; // Approximate starting Y position
+    if (!_hasText &&
+        !_showVideoIcon &&
+        _isRecording &&
+        !_isLocked &&
+        _recordStartPosition != null &&
+        !widget.isEditing) {
+      // Calculate delta from the starting position
+      final delta = details.globalPosition - _recordStartPosition!;
 
       setState(() {
-        _slideOffset = deltaX;
-        _verticalSlideOffset = deltaY;
+        _slideOffset = delta.dx;
+        _verticalSlideOffset = delta.dy;
       });
 
       // Cancel if slid too far left (more than 150 pixels)
@@ -320,7 +357,11 @@ class _MessageInputFieldState extends State<MessageInputField>
   }
 
   void _onVoiceButtonLongPressEnd(LongPressEndDetails details) {
-    if (!_hasText && !_showVideoIcon && _isRecording && !_isLocked) {
+    if (!_hasText &&
+        !_showVideoIcon &&
+        _isRecording &&
+        !_isLocked &&
+        !widget.isEditing) {
       if (_slideOffset < -150) {
         _cancelRecording();
       } else {
@@ -414,15 +455,21 @@ class _MessageInputFieldState extends State<MessageInputField>
                   ),
                 ),
               ),
-              const SizedBox(width: 60), // Space for the overlay column
+              const SizedBox(width: 60),
             ],
           ),
         ),
 
-        // Vertical column overlay (lock, arrow up, mic)
         Positioned(
-          right: 8,
-          top: -100,
+          right:
+              8 +
+              _slideOffset.clamp(-150.0, 0.0), // Move horizontally with slide
+          top:
+              -100 +
+              _verticalSlideOffset.clamp(
+                -100.0,
+                0.0,
+              ), // Move vertically with slide
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -453,7 +500,7 @@ class _MessageInputFieldState extends State<MessageInputField>
                       offset: Offset(0, _lockSlideAnimation!.value),
                       child: Icon(
                         Icons.keyboard_arrow_up,
-                        color: Colors.red.shade400,
+                        color: Colors.lightBlue,
                         size: 28,
                       ),
                     );
@@ -461,7 +508,7 @@ class _MessageInputFieldState extends State<MessageInputField>
                 ),
               const SizedBox(height: 8),
 
-              // Mic icon in circle
+              // Mic icon in circle - this now moves with the entire column
               Container(
                 width: 44,
                 height: 44,
@@ -649,7 +696,6 @@ class _MessageInputFieldState extends State<MessageInputField>
             if (_isPaused) {
               height = 3.0;
             } else {
-              // Add animation effect
               final animatedOffset = (_waveformController!.value * 10).round();
               final animatedIndex =
                   (index + animatedOffset) % baseHeights.length;
@@ -671,50 +717,77 @@ class _MessageInputFieldState extends State<MessageInputField>
     );
   }
 
-  Widget _buildWaveform() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: List.generate(15, (index) {
-        final heights = [
-          4.0,
-          8.0,
-          12.0,
-          16.0,
-          20.0,
-          16.0,
-          12.0,
-          8.0,
-          4.0,
-          8.0,
-          12.0,
-          16.0,
-          12.0,
-          8.0,
-          4.0,
-        ];
-        final height = _isPaused ? 4.0 : heights[index % heights.length];
+  Widget _buildSendOrSaveButton() {
+    // When editing, show the save button with tick icon
+    if (widget.isEditing) {
+      return Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: Colors.lightBlue[100],
+          boxShadow: [
+            BoxShadow(
+              color: Colors.lightBlue.withOpacity(0.3),
+              blurRadius: 6,
+              offset: Offset(0, 2),
+            ),
+          ],
+        ),
+        child: IconButton(
+          onPressed: widget.onSaveEdit,
+          icon: Icon(Icons.check, color: Colors.blue, size: 22),
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+        ),
+      );
+    }
 
-        return Container(
-          width: 3,
-          height: height,
-          margin: const EdgeInsets.symmetric(horizontal: 1.5),
-          decoration: BoxDecoration(
-            color: _isPaused ? Colors.grey.shade600 : Colors.blue.shade400,
-            borderRadius: BorderRadius.circular(2),
-          ),
-        );
-      }),
+    // Normal send button
+    return GestureDetector(
+      onTap: () {
+        if (_hasText) {
+          _handleSend();
+        } else {
+          _toggleVoiceVideoIcon();
+        }
+      },
+      onLongPressStart: widget.isEditing ? null : _onVoiceButtonLongPressStart,
+      onLongPressMoveUpdate:
+          widget.isEditing ? null : _onVoiceButtonLongPressMoveUpdate,
+      onLongPressEnd: widget.isEditing ? null : _onVoiceButtonLongPressEnd,
+      child: Container(
+        width: 36,
+        height: 36,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: _hasText ? Colors.blue : Colors.transparent,
+        ),
+        child: Icon(
+          _hasText
+              ? Icons.send_outlined
+              : _showVideoIcon
+              ? Icons.videocam_outlined
+              : Icons.mic_none_outlined,
+          color: _hasText ? Colors.white : Colors.grey.shade400,
+          size: _hasText ? 20 : 28,
+        ),
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    // Hide attachment and voice note buttons when editing
+    final showAttachmentButtons = !widget.isEditing;
+    final showVoiceButton = !widget.isEditing;
+
     return IntrinsicHeight(
       child: SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Show recording interface when recording, otherwise show normal input
             if (_isRecording && !_isLocked)
               Padding(
                 padding: EdgeInsets.fromLTRB(
@@ -764,33 +837,36 @@ class _MessageInputFieldState extends State<MessageInputField>
                   ),
                   child: Row(
                     children: [
-                      /// Emoji / Keyboard toggle
-                      IconButton(
-                        onPressed: _handleEmojiButtonPressed,
-                        icon:
-                            _emojiPickerOpen
-                                ? Icon(
-                                  Icons.keyboard,
-                                  color: Colors.grey.shade400,
-                                  size: 28,
-                                )
-                                : SvgPicture.asset(
-                                  'assets/svg/gif_icon.svg',
-                                  width: 28,
-                                  height: 28,
-                                  colorFilter: ColorFilter.mode(
-                                    Colors.grey.shade400,
-                                    BlendMode.srcIn,
+                      // Emoji button
+                      if (showAttachmentButtons)
+                        IconButton(
+                          onPressed: _handleEmojiButtonPressed,
+                          icon:
+                              _emojiPickerOpen
+                                  ? Icon(
+                                    Icons.keyboard,
+                                    color: Colors.grey.shade400,
+                                    size: 28,
+                                  )
+                                  : SvgPicture.asset(
+                                    'assets/svg/gif_icon.svg',
+                                    width: 28,
+                                    height: 28,
+                                    colorFilter: ColorFilter.mode(
+                                      Colors.grey.shade400,
+                                      BlendMode.srcIn,
+                                    ),
                                   ),
-                                ),
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(
-                          minWidth: 36,
-                          minHeight: 36,
-                        ),
-                      ),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(
+                            minWidth: 36,
+                            minHeight: 36,
+                          ),
+                        )
+                      else
+                        SizedBox(width: 8),
 
-                      /// Message field
+                      // Text field
                       Expanded(
                         child: Container(
                           alignment: Alignment.centerLeft,
@@ -801,9 +877,10 @@ class _MessageInputFieldState extends State<MessageInputField>
                               color: Colors.white,
                               fontSize: 18,
                             ),
-                            decoration: const InputDecoration(
-                              hintText: "Message",
-                              hintStyle: TextStyle(
+                            decoration: InputDecoration(
+                              hintText:
+                                  widget.isEditing ? "Edit message" : "Message",
+                              hintStyle: const TextStyle(
                                 color: Colors.grey,
                                 fontSize: 18,
                               ),
@@ -817,21 +894,16 @@ class _MessageInputFieldState extends State<MessageInputField>
                             minLines: 1,
                             textInputAction: TextInputAction.send,
                             onSubmitted: (value) {
-                              if (value.trim().isNotEmpty) {
-                                _handleSend();
-                              }
+                              if (value.trim().isNotEmpty) _handleSend();
                             },
                             onTap: () {
                               _handleTextFieldTap();
                               WidgetsBinding.instance.addPostFrameCallback((_) {
-                                if (!_focusNode.hasFocus) {
+                                if (!_focusNode.hasFocus)
                                   _focusNode.requestFocus();
-                                }
                               });
                             },
-                            onTapOutside: (event) {
-                              _focusNode.unfocus();
-                            },
+                            onTapOutside: (event) => _focusNode.unfocus(),
                             scrollController: _scrollController,
                             scrollPhysics: const ClampingScrollPhysics(),
                             keyboardAppearance: Brightness.dark,
@@ -842,73 +914,48 @@ class _MessageInputFieldState extends State<MessageInputField>
                         ),
                       ),
 
-                      /// Add button
-                      IconButton(
-                        onPressed: widget.onAttachmentPressed,
-                        icon: Icon(
-                          Icons.add,
-                          color: Colors.grey.shade400,
-                          size: 32,
-                        ),
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(
-                          minWidth: 36,
-                          minHeight: 36,
-                        ),
-                      ),
+                      // Attachment button (hidden when editing)
+                      if (showAttachmentButtons)
+                        IconButton(
+                          onPressed: widget.onAttachmentPressed,
+                          icon: Icon(
+                            Icons.add,
+                            color: Colors.grey.shade400,
+                            size: 32,
+                          ),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(
+                            minWidth: 36,
+                            minHeight: 36,
+                          ),
+                        )
+                      else
+                        SizedBox(width: 8),
 
-                      /// Express message
-                      IconButton(
-                        onPressed: () {},
-                        icon: SvgPicture.asset(
-                          'assets/svg/express_message.svg',
-                          width: 40,
-                          height: 40,
-                          colorFilter: ColorFilter.mode(
-                            Colors.grey.shade400,
-                            BlendMode.srcIn,
+                      // Express message button (hidden when editing)
+                      if (showAttachmentButtons)
+                        IconButton(
+                          onPressed: () {},
+                          icon: SvgPicture.asset(
+                            'assets/svg/express_message.svg',
+                            width: 40,
+                            height: 40,
+                            colorFilter: ColorFilter.mode(
+                              Colors.grey.shade400,
+                              BlendMode.srcIn,
+                            ),
                           ),
-                        ),
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(
-                          minWidth: 36,
-                          minHeight: 36,
-                        ),
-                      ),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(
+                            minWidth: 36,
+                            minHeight: 36,
+                          ),
+                        )
+                      else
+                        SizedBox(width: 8),
 
-                      /// Voice / Video / Send button
-                      GestureDetector(
-                        onTap: () {
-                          if (_hasText) {
-                            _handleSend();
-                          } else {
-                            _toggleVoiceVideoIcon();
-                          }
-                        },
-                        onLongPressStart: _onVoiceButtonLongPressStart,
-                        onLongPressMoveUpdate:
-                            _onVoiceButtonLongPressMoveUpdate,
-                        onLongPressEnd: _onVoiceButtonLongPressEnd,
-                        child: Container(
-                          width: 36,
-                          height: 36,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: _hasText ? Colors.blue : Colors.transparent,
-                          ),
-                          child: Icon(
-                            _hasText
-                                ? Icons.send_outlined
-                                : _showVideoIcon
-                                ? Icons.videocam_outlined
-                                : Icons.mic_none_outlined,
-                            color:
-                                _hasText ? Colors.white : Colors.grey.shade400,
-                            size: _hasText ? 20 : 28,
-                          ),
-                        ),
-                      ),
+                      // Send/Save button
+                      _buildSendOrSaveButton(),
                     ],
                   ),
                 ),
@@ -934,7 +981,6 @@ class _MessageInputFieldState extends State<MessageInputField>
   }
 }
 
-// Custom painter for dotted circle progress indicator
 class DottedCirclePainter extends CustomPainter {
   final double progress;
   final Color dotColor;
@@ -946,19 +992,17 @@ class DottedCirclePainter extends CustomPainter {
     final center = Offset(size.width / 2, size.height / 2);
     final radius = size.width / 2 - 2;
     final dotCount = 12;
-    final sweepAngle = 2 * 3.14159 * progress;
-
+    final sweepAngle = 2 * math.pi * progress;
     final paint =
         Paint()
           ..color = dotColor
           ..style = PaintingStyle.fill;
 
     for (int i = 0; i < dotCount; i++) {
-      final angle = (i / dotCount) * 2 * 3.14159 - (3.14159 / 2);
-
-      if (angle + (3.14159 / 2) <= sweepAngle) {
-        final x = center.dx + radius * cos(angle);
-        final y = center.dy + radius * sin(angle);
+      final angle = (i / dotCount) * 2 * math.pi - (math.pi / 2);
+      if (angle + (math.pi / 2) <= sweepAngle) {
+        final x = center.dx + radius * math.cos(angle);
+        final y = center.dy + radius * math.sin(angle);
         canvas.drawCircle(Offset(x, y), 1.5, paint);
       }
     }
@@ -967,32 +1011,5 @@ class DottedCirclePainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant DottedCirclePainter oldDelegate) {
     return oldDelegate.progress != progress;
-  }
-
-  double cos(double radians) => radians.cosine();
-  double sin(double radians) => radians.sine();
-}
-
-extension on double {
-  double cosine() {
-    // Taylor series approximation for cosine
-    double result = 1.0;
-    double term = 1.0;
-    for (int i = 1; i <= 10; i++) {
-      term *= -this * this / ((2 * i - 1) * (2 * i));
-      result += term;
-    }
-    return result;
-  }
-
-  double sine() {
-    // Taylor series approximation for sine
-    double result = this;
-    double term = this;
-    for (int i = 1; i <= 10; i++) {
-      term *= -this * this / ((2 * i) * (2 * i + 1));
-      result += term;
-    }
-    return result;
   }
 }

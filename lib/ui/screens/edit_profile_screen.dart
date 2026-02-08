@@ -224,7 +224,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Profile updated successfully')),
         );
-        Navigator.of(context).pop(); // pop back to profile (good UX)
+        Navigator.of(context).pop(); // pop back to profile
       }
     } catch (e) {
       debugPrint('Save error: $e');
@@ -390,7 +390,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Colors following your dark design
     const bg = Color(0xFF000000);
     const card = Color.fromARGB(255, 19, 18, 18);
     const accent = Colors.blue;

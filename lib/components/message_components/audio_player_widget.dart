@@ -7,8 +7,11 @@ class AudioPlayerWidget extends StatefulWidget {
   final String time;
   final bool isMe;
   final bool isRead;
-  final bool? isPlaying; // New: for external control
-  final Future<void> Function()? onPlayPressed; // New: for external control
+  final bool? isPlaying;
+  final Future<void> Function()? onPlayPressed;
+  final VoidCallback onLongPress;
+  final String? profileImageUrl;
+  final String? userName;
 
   const AudioPlayerWidget({
     super.key,
@@ -19,7 +22,9 @@ class AudioPlayerWidget extends StatefulWidget {
     required this.isRead,
     this.isPlaying,
     this.onPlayPressed,
-    required void Function() onLongPress,
+    required this.onLongPress,
+    this.profileImageUrl,
+    this.userName,
   });
 
   @override
@@ -30,82 +35,71 @@ class _AudioPlayerWidgetState extends State<AudioPlayerWidget> {
   final AudioPlayer _audioPlayer = AudioPlayer();
   bool _isPlaying = false;
   Duration _currentPosition = Duration.zero;
-  bool _isInitialized = false;
+  bool _initialized = false;
+  double _playbackSpeed = 1.0;
 
   @override
   void initState() {
     super.initState();
-    _setupAudioPlayer();
     _isPlaying = widget.isPlaying ?? false;
-  }
 
-  @override
-  void didUpdateWidget(covariant AudioPlayerWidget oldWidget) {
-    super.didUpdateWidget(oldWidget);
-
-    // Update playing state if controlled externally
-    if (oldWidget.isPlaying != widget.isPlaying) {
-      setState(() {
-        _isPlaying = widget.isPlaying ?? false;
-      });
-    }
-  }
-
-  void _setupAudioPlayer() {
     _audioPlayer.onPlayerStateChanged.listen((state) {
-      // Only update if not externally controlled
       if (widget.onPlayPressed == null) {
-        setState(() {
-          _isPlaying = state == PlayerState.playing;
-        });
+        setState(() => _isPlaying = state == PlayerState.playing);
       }
     });
 
-    _audioPlayer.onPositionChanged.listen((position) {
-      setState(() {
-        _currentPosition = position;
-      });
+    _audioPlayer.onPositionChanged.listen((pos) {
+      setState(() => _currentPosition = pos);
     });
 
-    _audioPlayer.onPlayerComplete.listen((event) {
+    _audioPlayer.onPlayerComplete.listen((_) {
       setState(() {
         _currentPosition = Duration.zero;
-        if (widget.onPlayPressed == null) {
-          _isPlaying = false;
-        }
+        _isPlaying = false;
       });
     });
   }
 
-  Future<void> _togglePlayPause() async {
-    // If external control is provided, use it
+  Future<void> _toggle() async {
     if (widget.onPlayPressed != null) {
       await widget.onPlayPressed!();
       return;
     }
 
-    // Otherwise use internal audio player
     if (_isPlaying) {
       await _audioPlayer.pause();
     } else {
-      if (!_isInitialized) {
+      if (!_initialized) {
         await _audioPlayer.setSource(UrlSource(widget.audioUrl));
-        _isInitialized = true;
+        _initialized = true;
       }
       await _audioPlayer.resume();
     }
   }
 
-  String _formatDuration(Duration duration) {
-    String twoDigits(int n) => n.toString().padLeft(2, "0");
-    final minutes = twoDigits(duration.inMinutes.remainder(60));
-    final seconds = twoDigits(duration.inSeconds.remainder(60));
-    return "$minutes:$seconds";
+  void _toggleSpeed() {
+    setState(() {
+      if (_playbackSpeed == 1.0) {
+        _playbackSpeed = 1.5;
+      } else if (_playbackSpeed == 1.5) {
+        _playbackSpeed = 2.0;
+      } else {
+        _playbackSpeed = 1.0;
+      }
+    });
+    _audioPlayer.setPlaybackRate(_playbackSpeed);
   }
 
   double get _progress {
     if (widget.duration.inMilliseconds == 0) return 0;
     return _currentPosition.inMilliseconds / widget.duration.inMilliseconds;
+  }
+
+  String _fmt(Duration d) {
+    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return '$m:$s';
   }
 
   @override
@@ -116,154 +110,213 @@ class _AudioPlayerWidgetState extends State<AudioPlayerWidget> {
 
   @override
   Widget build(BuildContext context) {
+    final bubbleColor =
+        widget.isMe
+            ? const Color.fromARGB(255, 16, 70, 151)
+            : const Color(0xFF2A2F32);
+
+    Color micIconColor;
+    if (widget.isRead) {
+      micIconColor = const Color(0xFF25D366);
+    } else {
+      micIconColor = widget.isMe ? Colors.grey : const Color(0xFF53BDEB);
+    }
+
+    final waveColor = Colors.white;
+    final waveColorInactive = Colors.white54;
+
     return Container(
-      constraints: const BoxConstraints(maxWidth: 280),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      constraints: BoxConstraints(
+        // RESPONSIVE WIDTH FIX (prevents overflow on small screens)
+        maxWidth: MediaQuery.of(context).size.width * 0.78,
+      ),
+      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: widget.isMe ? const Color(0xFF404040) : const Color(0xFF404040),
+        color: bubbleColor,
         borderRadius: BorderRadius.only(
-          topLeft: const Radius.circular(8),
-          topRight: const Radius.circular(8),
-          bottomLeft:
-              widget.isMe ? const Radius.circular(8) : const Radius.circular(0),
-          bottomRight:
-              widget.isMe ? const Radius.circular(0) : const Radius.circular(8),
+          topLeft: const Radius.circular(12),
+          topRight: const Radius.circular(12),
+          bottomLeft: widget.isMe ? const Radius.circular(12) : Radius.zero,
+          bottomRight: widget.isMe ? Radius.zero : const Radius.circular(12),
         ),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
           Row(
-            mainAxisSize: MainAxisSize.min,
             children: [
-              // Play/Pause Button
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: widget.isMe ? const Color(0xFF0078FF) : Colors.white,
-                  shape: BoxShape.circle,
-                ),
-                child: IconButton(
-                  onPressed: _togglePlayPause,
-                  icon: Icon(
-                    _isPlaying ? Icons.pause : Icons.play_arrow,
-                    color: Colors.black,
-                    size: 20,
-                  ),
-                  padding: EdgeInsets.zero,
-                ),
+              GestureDetector(
+                onTap: _toggle,
+                child:
+                    widget.isMe
+                        ? _buildProfilePlayButton(micIconColor)
+                        : _buildCircularPlayButton(bubbleColor, micIconColor),
               ),
+
               const SizedBox(width: 8),
-              // Waveform and Progress
+
+              // Waveform always shrinks first
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Waveform visualization (simplified as bars)
-                    SizedBox(
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final barCount = (constraints.maxWidth / 3.6).floor().clamp(
+                      18,
+                      36,
+                    );
+
+                    return SizedBox(
                       height: 24,
                       child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: List.generate(30, (index) {
-                          final heights = [
-                            0.3,
-                            0.6,
-                            0.8,
-                            0.5,
-                            0.9,
-                            0.4,
-                            0.7,
-                            0.6,
-                            0.5,
-                            0.8,
-                            0.7,
-                            0.4,
-                            0.6,
-                            0.9,
-                            0.5,
-                            0.7,
-                            0.6,
-                            0.4,
-                            0.8,
-                            0.5,
-                            0.7,
-                            0.6,
-                            0.9,
-                            0.4,
-                            0.7,
-                            0.5,
-                            0.8,
-                            0.6,
-                            0.4,
-                            0.7,
-                          ];
-                          final isPlayed = (index / 30) <= _progress;
-                          return Container(
-                            width: 2,
-                            height: 24 * heights[index % heights.length],
-                            decoration: BoxDecoration(
-                              color:
-                                  isPlayed
-                                      ? (widget.isMe
-                                          ? const Color(0xFF0078FF)
-                                          : Colors.white)
-                                      : (widget.isMe
-                                          ? const Color(
-                                            0xFF87CEEB,
-                                          ).withOpacity(0.4)
-                                          : Colors.grey.withOpacity(0.4)),
-                              borderRadius: BorderRadius.circular(1),
+                        children: List.generate(barCount, (i) {
+                          final active = (i / barCount) <= _progress;
+                          final heights = [3, 6, 10, 14, 18, 14, 10, 6];
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 0.8,
+                            ),
+                            child: Container(
+                              width: 2,
+                              height: heights[i % heights.length].toDouble(),
+                              decoration: BoxDecoration(
+                                color: active ? waveColor : waveColorInactive,
+                                borderRadius: BorderRadius.circular(1),
+                              ),
                             ),
                           );
                         }),
                       ),
+                    );
+                  },
+                ),
+              ),
+
+              const SizedBox(width: 6),
+
+              // Speed badge
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 46),
+                child: GestureDetector(
+                  onTap: _toggleSpeed,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 4,
                     ),
-                    const SizedBox(height: 4),
-                    // Duration
-                    Text(
-                      _isPlaying || _currentPosition.inSeconds > 0
-                          ? _formatDuration(_currentPosition)
-                          : _formatDuration(widget.duration),
-                      style: TextStyle(
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade700,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      '${_playbackSpeed}x',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
                         fontSize: 12,
-                        color: widget.isMe ? Colors.white : Colors.white,
+                        color: Colors.white,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
-                  ],
+                  ),
                 ),
               ),
             ],
           ),
-          // Time and Read Status
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              Text(
-                widget.time,
-                style: TextStyle(
-                  fontSize: 11,
-                  color: widget.isMe ? Colors.white : Colors.white,
+
+          const SizedBox(height: 6),
+
+          Padding(
+            padding: const EdgeInsets.only(left: 52),
+            child: Row(
+              children: [
+                Text(
+                  _isPlaying || _currentPosition.inSeconds > 0
+                      ? _fmt(_currentPosition)
+                      : _fmt(widget.duration),
+                  style: const TextStyle(fontSize: 11, color: Colors.white70),
                 ),
-              ),
-              if (widget.isMe) ...[
-                const SizedBox(width: 4),
-                Icon(
-                  Icons.done_all,
-                  size: 14,
-                  color:
-                      widget.isRead
-                          ? const Color(0xFF53BDEB)
-                          : Colors.grey[500],
+                const Spacer(),
+                Text(
+                  widget.time,
+                  style: const TextStyle(fontSize: 11, color: Colors.white70),
                 ),
+                if (widget.isMe) ...[
+                  const SizedBox(width: 4),
+                  Icon(
+                    Icons.done_all,
+                    size: 14,
+                    color:
+                        widget.isRead
+                            ? const Color(0xFF25D366)
+                            : Colors.white38,
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildProfilePlayButton(Color micIconColor) {
+    final ImageProvider avatarImage =
+        widget.profileImageUrl != null && widget.profileImageUrl!.isNotEmpty
+            ? NetworkImage(widget.profileImageUrl!)
+            : const AssetImage('assets/images/default_avatar.jpg');
+
+    return Stack(
+      clipBehavior: Clip.none,
+      alignment: Alignment.center,
+      children: [
+        CircleAvatar(
+          radius: 21,
+          backgroundColor: Colors.grey[800],
+          backgroundImage: avatarImage,
+        ),
+        Container(
+          width: 42,
+          height: 42,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: Colors.black.withOpacity(0.35),
+          ),
+        ),
+        Icon(
+          _isPlaying ? Icons.pause : Icons.play_arrow,
+          size: 30,
+          color: Colors.white,
+        ),
+        Positioned(
+          bottom: -3,
+          right: -2,
+          child: Icon(Icons.mic, size: 20, color: micIconColor),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCircularPlayButton(Color bubbleColor, Color micIconColor) {
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        Container(
+          width: 42,
+          height: 42,
+          decoration: const BoxDecoration(
+            color: Color.fromARGB(255, 16, 70, 151),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(
+            _isPlaying ? Icons.pause : Icons.play_arrow,
+            size: 30,
+            color: Colors.white,
+          ),
+        ),
+        Positioned(
+          bottom: -3,
+          left: -2,
+          child: Icon(Icons.mic, size: 20, color: micIconColor),
+        ),
+      ],
     );
   }
 }

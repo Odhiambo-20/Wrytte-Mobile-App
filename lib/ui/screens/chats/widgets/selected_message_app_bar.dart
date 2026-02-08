@@ -107,27 +107,21 @@ class SelectedMessageAppBar extends StatelessWidget
           ),
           Expanded(
             child: Container(
-              padding: const EdgeInsets.only(
-                left: 4,
-              ), // Added padding to push text right
+              padding: const EdgeInsets.only(left: 4),
               child: Text(
                 selectedCount == 1 ? '1' : '$selectedCount',
                 style: const TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.bold,
-                  fontSize: 20, // Slightly increased font size
+                  fontSize: 20,
                 ),
               ),
             ),
           ),
         ],
       ),
-      title:
-          const SizedBox(), // Empty title since we moved the count to leading
-      actions: [
-        ...actionWidgets,
-        const SizedBox(width: 4), // Reduced from 8 to 4
-      ],
+      title: const SizedBox(),
+      actions: [...actionWidgets, const SizedBox(width: 4)],
     );
   }
 }

@@ -65,7 +65,7 @@ class SelectionTopBar extends StatelessWidget {
                 ],
               ),
 
-              // Action buttons - evenly spaced (no labels, larger icons)
+              // Action buttons - evenly spaced
               Expanded(
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -108,11 +108,7 @@ class SelectionTopBar extends StatelessWidget {
       color: Colors.transparent,
       child: IconButton(
         onPressed: onTap,
-        icon: Icon(
-          icon,
-          color: Colors.white,
-          size: 26, // Larger icons
-        ),
+        icon: Icon(icon, color: Colors.white, size: 26),
         padding: EdgeInsets.zero,
         constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
       ),

@@ -217,7 +217,7 @@ class _ChatItemState extends State<ChatItem> {
 
   Future<void> _performBlock(BuildContext context) async {
     // TODO: Implement block functionality
-    // This would typically update Firestore or your backend
+    // This would typically update Firestore or my backend
     _showSnackBar(context, 'User blocked', Colors.red);
   }
 

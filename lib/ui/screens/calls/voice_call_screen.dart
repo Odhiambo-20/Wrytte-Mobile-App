@@ -80,7 +80,7 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
   }
 
   void _playCallingTone() async {
-    // You can add a calling tone audio file
+    // to add a calling tone audio file
     // await _audioPlayer.play(AssetSource('audio/calling_tone.mp3'));
   }
 
@@ -148,7 +148,7 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
   void _navigateBack() {
     if (!mounted) return;
 
-    // Use a microtask to ensure navigation happens after current frame
+    // Using a microtask to ensure navigation happens after current frame
     Future.microtask(() {
       if (mounted) {
         Navigator.of(context).pop();
@@ -161,7 +161,7 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
     setState(() {
       _isMuted = !_isMuted;
     });
-    // Implement actual mute functionality
+    // to Implement actual mute functionality
   }
 
   void _toggleSpeaker() {
@@ -169,7 +169,7 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
     setState(() {
       _isSpeakerOn = !_isSpeakerOn;
     });
-    // Implement speaker functionality
+    // to Implement speaker functionality
   }
 
   // New method for video call button (placeholder)
@@ -286,7 +286,7 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // Back/Minimize button with circular background
+          // Back/Minimize button
           Container(
             width: 50,
             height: 50,
@@ -330,7 +330,7 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
             ),
           ),
 
-          // Contact button with circular background
+          // Contact button
           Container(
             width: 50,
             height: 50,

@@ -121,7 +121,7 @@ class CallService {
     int? duration,
   ]) async {
     // This would update the call history for both users
-    // Implementation depends on your database structure
+    // Implementation depends on my database structure
   }
 
   // Get call stream

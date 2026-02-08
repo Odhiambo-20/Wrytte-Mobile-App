@@ -37,7 +37,7 @@ class ReplyPreview extends StatelessWidget {
         ),
         child: Row(
           children: [
-            // Left reply indicator (WhatsApp style)
+            // Left reply indicator
             Container(
               width: 4,
               height: 36,

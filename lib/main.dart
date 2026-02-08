@@ -17,7 +17,6 @@ import 'core/theme.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize Firebase
   try {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
@@ -33,13 +32,10 @@ Future<void> main() async {
 
 Future<void> setStatusBarAndNavigationBarColors() async {
   try {
-    // Set status bar color
     await FlutterStatusbarcolor.setStatusBarColor(Colors.black);
 
-    // Set navigation bar color (for Android)
     await FlutterStatusbarcolor.setNavigationBarColor(Colors.black);
 
-    // Check if the status bar should have light or dark icons
     if (useWhiteForeground(Colors.black)) {
       FlutterStatusbarcolor.setStatusBarWhiteForeground(true);
       FlutterStatusbarcolor.setNavigationBarWhiteForeground(true);
@@ -62,7 +58,7 @@ class WrytteApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: WrytteTheme.lightTheme,
       home: const AuthWrapper(),
-      // Define named routes
+
       routes: {
         '/phone_auth': (context) => const PhoneAuthPage(),
         '/sign_in': (context) => const SignInPage(),
@@ -92,11 +88,10 @@ class WrytteApp extends StatelessWidget {
           );
         },
       },
-      // Handle route generation with proper error handling
+
       onGenerateRoute: (settings) {
         debugPrint('Generating route for: ${settings.name}');
 
-        // Handle unknown routes by redirecting to auth wrapper
         return MaterialPageRoute(builder: (context) => const AuthWrapper());
       },
       onUnknownRoute: (settings) {
@@ -107,7 +102,7 @@ class WrytteApp extends StatelessWidget {
   }
 }
 
-// Professional Auth Wrapper to handle user session persistence
+// Auth Wrapper to handle user session persistence
 class AuthWrapper extends StatefulWidget {
   const AuthWrapper({super.key});
 

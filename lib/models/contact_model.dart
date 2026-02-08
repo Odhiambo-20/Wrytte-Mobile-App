@@ -4,8 +4,8 @@ class Contact {
   final String? avatarUrl;
   final bool isOnWrytte;
   final String? wrytteUserId;
-  final String? databaseName; // New field for database name
-  final bool isRecent; // New field for recent contacts
+  final String? databaseName;
+  final bool isRecent;
 
   Contact({
     required this.displayName,
@@ -13,8 +13,8 @@ class Contact {
     this.avatarUrl,
     this.isOnWrytte = false,
     this.wrytteUserId,
-    this.databaseName, // Added to constructor
-    this.isRecent = false, // Added with default value
+    this.databaseName,
+    this.isRecent = false,
   });
 
   String get formattedName => displayName ?? 'Unknown';

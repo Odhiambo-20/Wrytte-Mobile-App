@@ -9,7 +9,6 @@ class MessageScreenAppBar extends StatelessWidget
   final VoidCallback onBackPressed;
   final VoidCallback onVideoCallPressed;
   final VoidCallback onVoiceCallPressed;
-  final Function(String) onMenuSelected;
 
   const MessageScreenAppBar({
     super.key,
@@ -17,7 +16,6 @@ class MessageScreenAppBar extends StatelessWidget
     required this.onBackPressed,
     required this.onVideoCallPressed,
     required this.onVoiceCallPressed,
-    required this.onMenuSelected,
     this.avatarUrl,
     this.isOnline = false,
   });
@@ -72,64 +70,6 @@ class MessageScreenAppBar extends StatelessWidget
         IconButton(
           icon: const Icon(Icons.call, color: Colors.white),
           onPressed: onVoiceCallPressed,
-        ),
-        const SizedBox(width: 1),
-        PopupMenuButton<String>(
-          icon: const Icon(Icons.more_vert, color: Colors.white),
-          onSelected: onMenuSelected,
-          itemBuilder:
-              (BuildContext context) => [
-                const PopupMenuItem<String>(
-                  value: 'view_contact',
-                  child: Row(
-                    children: [
-                      Icon(Icons.person_outline),
-                      SizedBox(width: 8),
-                      Text('View contact'),
-                    ],
-                  ),
-                ),
-                const PopupMenuItem<String>(
-                  value: 'media',
-                  child: Row(
-                    children: [
-                      Icon(Icons.photo_library_outlined),
-                      SizedBox(width: 8),
-                      Text('Media, links, and docs'),
-                    ],
-                  ),
-                ),
-                const PopupMenuItem<String>(
-                  value: 'search',
-                  child: Row(
-                    children: [
-                      Icon(Icons.search),
-                      SizedBox(width: 8),
-                      Text('Search'),
-                    ],
-                  ),
-                ),
-                const PopupMenuItem<String>(
-                  value: 'mute',
-                  child: Row(
-                    children: [
-                      Icon(Icons.notifications_off_outlined),
-                      SizedBox(width: 8),
-                      Text('Mute notifications'),
-                    ],
-                  ),
-                ),
-                const PopupMenuItem<String>(
-                  value: 'wallpaper',
-                  child: Row(
-                    children: [
-                      Icon(Icons.wallpaper_outlined),
-                      SizedBox(width: 8),
-                      Text('Wallpaper'),
-                    ],
-                  ),
-                ),
-              ],
         ),
         const SizedBox(width: 8),
       ],

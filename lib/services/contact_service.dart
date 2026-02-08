@@ -100,7 +100,7 @@ class ContactService {
     }
   }
 
-  // Professional phone number normalization like WhatsApp
+  // Professional phone number normalization
   Future<String> _normalizePhoneNumberProfessional(
     String phone,
     String? countryCode,
@@ -108,14 +108,14 @@ class ContactService {
     if (phone.isEmpty) return '';
 
     try {
-      // Use libphonenumber for professional parsing (like WhatsApp)
+      // Use libphonenumber for professional parsing
       final parsedNumber = await Libphonenumber.parse(
         phone,
         region: countryCode ?? await _getUserCountryCode() ?? 'US',
       );
 
       if (parsedNumber.isValid()) {
-        // Format in E.164 international format (like WhatsApp)
+        // Format in E.164 international format
         final internationalFormat = await Libphonenumber.format(
           phone,
           region: countryCode ?? await _getUserCountryCode() ?? 'US',
@@ -220,7 +220,7 @@ class ContactService {
     return contacts;
   }
 
-  // WhatsApp-style contact matching - ALWAYS USE DEVICE CONTACT NAMES
+  // WhatsApp-style contact matching - ALWAYS to USE DEVICE CONTACT NAMES
   Future<List<Contact>> getWrytteContacts() async {
     final stopwatch = Stopwatch()..start();
     final deviceContacts = await getDeviceContacts();
@@ -235,7 +235,7 @@ class ContactService {
     final allPhoneNumbers =
         deviceContacts.expand((contact) => contact.phones).toSet();
     debugPrint(
-      '🚀 Checking ${allPhoneNumbers.length} unique numbers against Wrytte users',
+      ' Checking ${allPhoneNumbers.length} unique numbers against Wrytte users',
     );
 
     // Single batch query for all numbers
@@ -251,9 +251,9 @@ class ContactService {
       }
     }
 
-    debugPrint('✅ Exact matches: ${exactMatches.length}');
+    debugPrint(' Exact matches: ${exactMatches.length}');
 
-    // WhatsApp-like behavior: ALWAYS use device contact names
+    // WhatsApp-like behavior: ALWAYS to use device contact names
     for (var deviceContact in deviceContacts) {
       Contact? matchedContact;
 
@@ -287,17 +287,15 @@ class ContactService {
     }
 
     debugPrint(
-      '🎯 FINAL: Found ${wrytteContacts.length} Wrytte contacts in ${stopwatch.elapsedMilliseconds}ms',
+      ' FINAL: Found ${wrytteContacts.length} Wrytte contacts in ${stopwatch.elapsedMilliseconds}ms',
     );
 
     // Log the name strategy
     if (wrytteContacts.isNotEmpty) {
-      debugPrint(
-        '📝 NAME STRATEGY: Using device contact names (WhatsApp-style)',
-      );
+      debugPrint(' NAME STRATEGY: Using device contact names (WhatsApp-style)');
       for (var contact in wrytteContacts.take(3)) {
         debugPrint(
-          '   👤 "${contact.displayName}" (Device name) '
+          '    "${contact.displayName}" (Device name) '
           'vs Database: "${contact.databaseName ?? "N/A"}"',
         );
       }
@@ -320,7 +318,7 @@ class ContactService {
     // Get all unique normalized phone numbers
     final allPhoneNumbers =
         deviceContacts.expand((contact) => contact.phones).toSet();
-    debugPrint('🚀 ULTRAFAST: Checking ${allPhoneNumbers.length} numbers');
+    debugPrint(' ULTRAFAST: Checking ${allPhoneNumbers.length} numbers');
 
     // Single batch query for all numbers
     final matches = await _findExactMatches(allPhoneNumbers);
@@ -361,7 +359,7 @@ class ContactService {
       }
     }
 
-    debugPrint('🚀 ULTRAFAST completed in ${stopwatch.elapsedMilliseconds}ms');
+    debugPrint(' ULTRAFAST completed in ${stopwatch.elapsedMilliseconds}ms');
     return wrytteContacts;
   }
 
@@ -377,7 +375,7 @@ class ContactService {
       return value;
     }
 
-    // Try to convert if types don't match but value exists
+    // Trying to convert if types don't match but value exists
     try {
       if (T == String && value != null) {
         return value.toString() as T;
@@ -457,14 +455,12 @@ class ContactService {
     final allPhoneNumbers =
         deviceContacts.expand((contact) => contact.phones).toSet();
 
-    debugPrint('⏱️  Optimization: Checking ${allPhoneNumbers.length} numbers');
+    debugPrint(' Optimization: Checking ${allPhoneNumbers.length} numbers');
 
     final matches = await _findExactMatches(allPhoneNumbers);
     final wrytteContacts = _matchContactsWithUsers(deviceContacts, matches);
 
-    debugPrint(
-      '⏱️  Optimization completed in ${stopwatch.elapsedMilliseconds}ms',
-    );
+    debugPrint(' Optimization completed in ${stopwatch.elapsedMilliseconds}ms');
     return wrytteContacts;
   }
 
@@ -486,7 +482,7 @@ class ContactService {
           final userData = matchingUser.data();
           final avatarUrl = _getSafeField<String>(userData, 'profileImage');
 
-          // WHATSAPP BEHAVIOR: Always use device contact name
+          // WHATSAPP BEHAVIOR: Always to use device contact name
           final displayName = deviceContact.displayName;
 
           wrytteContacts.add(
