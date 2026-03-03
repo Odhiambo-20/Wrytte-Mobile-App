@@ -97,7 +97,7 @@ class SelectedMessageAppBar extends StatelessWidget
     final actionWidgets = _getAvailableActions();
 
     return AppBar(
-      backgroundColor: const Color.fromARGB(255, 19, 18, 18),
+      backgroundColor: const Color(0xFF0F1013),
       elevation: 0,
       leading: Row(
         children: [

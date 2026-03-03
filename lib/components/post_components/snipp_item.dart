@@ -74,7 +74,7 @@ class SnippItem extends StatelessWidget {
                                       height: 25,
                                       width: 25,
                                       decoration: BoxDecoration(
-                                        color: Colors.blue,
+                                        color: Color(0xFF4DA3FF),
                                         shape: BoxShape.circle,
                                         border: Border.all(
                                           color: Colors.black,

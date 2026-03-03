@@ -97,7 +97,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ListTile(
                   title: const Text(
                     'Cancel',
-                    style: TextStyle(color: Colors.blue),
+                    style: TextStyle(color: Color(0xFF4DA3FF)),
                   ),
                   onTap: () => Navigator.pop(context),
                 ),
@@ -189,7 +189,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 child: Text(
                                   link,
                                   style: const TextStyle(
-                                    color: Colors.lightBlue,
+                                    color: Color(0xFF4DA3FF),
                                     fontSize: 16,
                                   ),
                                   overflow: TextOverflow.ellipsis,
@@ -198,7 +198,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               const SizedBox(width: 8),
                               const Icon(
                                 Icons.open_in_new,
-                                color: Colors.lightBlue,
+                                color: Color(0xFF4DA3FF),
                                 size: 16,
                               ),
                             ],
@@ -221,9 +221,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final profileImageUrl = _userData?['profileImage']?.toString();
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: const Color(0xFF08090B),
       appBar: AppBar(
-        backgroundColor: const Color.fromARGB(255, 19, 18, 18),
+        backgroundColor: const Color(0xFF0F1013),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () => Navigator.of(context).pop(),
@@ -243,7 +243,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             },
             child: const Text(
               'Edit',
-              style: TextStyle(color: Colors.blue, fontSize: 16),
+              style: TextStyle(color: Color(0xFF4DA3FF), fontSize: 16),
             ),
           ),
         ],
@@ -273,7 +273,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         height: 130,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          border: Border.all(color: Colors.blue, width: 3),
+                          border: Border.all(
+                            color: Color(0xFF4DA3FF),
+                            width: 3,
+                          ),
                         ),
                         child: CircleAvatar(
                           radius: 64,
@@ -310,7 +313,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       child: Text(
                         '$phone',
                         style: const TextStyle(
-                          color: Colors.blue,
+                          color: Color(0xFF4DA3FF),
                           fontSize: 18,
                         ),
                       ),
@@ -368,7 +371,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             ),
                           ),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.blue,
+                            backgroundColor: Color(0xFF4DA3FF),
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(vertical: 16),
                             shape: RoundedRectangleBorder(

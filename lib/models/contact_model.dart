@@ -20,7 +20,7 @@ class Contact {
   String get formattedName => displayName ?? 'Unknown';
   String get primaryPhone => phones.isNotEmpty ? phones.first : '';
 
-  // Optional: Add a copyWith method for easier updates
+  // for easier updates
   Contact copyWith({
     String? displayName,
     List<String>? phones,
@@ -28,7 +28,7 @@ class Contact {
     bool? isOnWrytte,
     String? wrytteUserId,
     String? databaseName,
-    bool? isRecent, // Added to copyWith
+    bool? isRecent,
   }) {
     return Contact(
       displayName: displayName ?? this.displayName,
@@ -37,7 +37,7 @@ class Contact {
       isOnWrytte: isOnWrytte ?? this.isOnWrytte,
       wrytteUserId: wrytteUserId ?? this.wrytteUserId,
       databaseName: databaseName ?? this.databaseName,
-      isRecent: isRecent ?? this.isRecent, // Added to copyWith
+      isRecent: isRecent ?? this.isRecent,
     );
   }
 

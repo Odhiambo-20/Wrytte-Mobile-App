@@ -17,13 +17,11 @@ class BottomNavBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: const BoxDecoration(
-        border: Border(
-          top: BorderSide(color: Color.fromARGB(255, 19, 18, 18), width: 0.1),
-        ),
+        border: Border(top: BorderSide(color: Color(0xFF0F1013), width: 0.1)),
       ),
       child: BottomNavigationBar(
         type: BottomNavigationBarType.fixed,
-        backgroundColor: const Color.fromARGB(255, 19, 18, 18),
+        backgroundColor: const Color(0xFF0F1013),
         selectedItemColor: Colors.white,
         unselectedItemColor: Colors.grey,
         currentIndex: currentIndex,

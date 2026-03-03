@@ -390,14 +390,14 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    const bg = Color(0xFF000000);
-    const card = Color.fromARGB(255, 19, 18, 18);
-    const accent = Colors.blue;
+    const bg = Color(0xFF08090B);
+    const card = Color(0xFF23262C);
+    const accent = Color(0xFF4DA3FF);
 
     return Scaffold(
       backgroundColor: bg,
       appBar: AppBar(
-        backgroundColor: const Color.fromARGB(255, 19, 18, 18),
+        backgroundColor: const Color(0xFF0F1013),
         leading: TextButton(
           onPressed: () => Navigator.of(context).pop(),
           child: const Text(
@@ -417,7 +417,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 color:
                     _isLoading || !_hasUnsavedChanges
                         ? Colors.grey
-                        : Colors.lightBlue,
+                        : Color(0xFF4DA3FF),
               ),
             ),
           ),
@@ -625,13 +625,13 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                                 title: const Text(
                                   'Add links',
                                   style: TextStyle(
-                                    color: Colors.blue,
+                                    color: Color(0xFF4DA3FF),
                                     fontSize: 18,
                                   ),
                                 ),
                                 trailing: const Icon(
                                   Icons.add,
-                                  color: Colors.blue,
+                                  color: Color(0xFF4DA3FF),
                                 ),
                                 onTap: _showAddLinkDialog,
                               ),
@@ -686,7 +686,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                                 title: const Text(
                                   'Add +',
                                   style: TextStyle(
-                                    color: Colors.blue,
+                                    color: Color(0xFF4DA3FF),
                                     fontSize: 18,
                                   ),
                                 ),
@@ -718,7 +718,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                                   child: Text(
                                     'Add another account',
                                     style: TextStyle(
-                                      color: Colors.blue,
+                                      color: Color(0xFF4DA3FF),
                                       fontSize: 18,
                                     ),
                                   ),

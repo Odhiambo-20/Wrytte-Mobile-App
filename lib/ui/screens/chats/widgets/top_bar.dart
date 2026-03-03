@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:wrytte/ui/screens/chats/widgets/selection_top_bar.dart';
-import 'package:wrytte/ui/screens/select_contact_screen.dart';
 
-class TopBar extends StatelessWidget {
+class TopBar extends StatelessWidget implements PreferredSizeWidget {
   final bool isSelectionMode;
   final int selectedCount;
   final VoidCallback? onEditPressed;
@@ -28,6 +27,9 @@ class TopBar extends StatelessWidget {
   });
 
   @override
+  Size get preferredSize => const Size.fromHeight(kToolbarHeight);
+
+  @override
   Widget build(BuildContext context) {
     if (isSelectionMode) {
       return SelectionTopBar(
@@ -41,39 +43,36 @@ class TopBar extends StatelessWidget {
       );
     }
 
-    return Container(
-      color: const Color.fromARGB(255, 19, 18, 18),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+    return AppBar(
+      backgroundColor: const Color(0xFF0F1013),
+      elevation: 0,
+      automaticallyImplyLeading: false,
+      titleSpacing: 0,
+      title: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12),
         child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             GestureDetector(
               onTap: onEditPressed,
-              child: const Icon(Icons.edit, color: Colors.lightBlue, size: 25),
+              child: const Icon(Icons.edit, color: Color(0xFF4DA3FF), size: 25),
             ),
-            Row(
-              children: [
-                const SizedBox(width: 40),
-                IconButton(
-                  onPressed: () {},
-                  icon: SvgPicture.asset(
-                    'assets/svg/stories_icon.svg',
-                    height: 25,
-                    width: 25,
-                    // ignore: deprecated_member_use
-                    color: Colors.lightBlue,
-                  ),
-                ),
-                IconButton(
-                  onPressed: () {},
-                  icon: Icon(
-                    Icons.more_vert,
-                    color: Colors.lightBlue,
-                    size: 30,
-                  ),
-                ),
-              ],
+            const Spacer(),
+            IconButton(
+              onPressed: () {},
+              icon: SvgPicture.asset(
+                'assets/svg/stories_icon.svg',
+                height: 25,
+                width: 25,
+                color: Color(0xFF4DA3FF),
+              ),
+            ),
+            IconButton(
+              onPressed: () {},
+              icon: const Icon(
+                Icons.more_vert,
+                color: Color(0xFF4DA3FF),
+                size: 30,
+              ),
             ),
           ],
         ),

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'chats/chats_screen.dart';
+import 'package:wrytte/ui/screens/chats/conversations_screen.dart';
 import 'calls/calls_screen.dart';
 import 'post/post_screen.dart';
 import 'shops/shops_screen.dart';
@@ -7,14 +7,16 @@ import 'settings/settings_screen.dart';
 import '../widgets/bottom_nav_bar.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  final String currentUserId;
+
+  const HomeScreen({super.key, required this.currentUserId});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  int _currentIndex = 1; // Default to Chats
+  int _currentIndex = 1; // Default to Conversations
   int _totalUnreadCount = 0;
 
   void _onTabTapped(int index) {
@@ -38,7 +40,7 @@ class _HomeScreenState extends State<HomeScreen> {
       case 0:
         return const ShopsScreen();
       case 1:
-        return ChatsScreen(onUnreadCountUpdated: _updateUnreadCount);
+        return ConversationsScreen();
       case 2:
         return const PostScreen();
       case 3:
@@ -46,7 +48,7 @@ class _HomeScreenState extends State<HomeScreen> {
       case 4:
         return const SettingsScreen();
       default:
-        return ChatsScreen(onUnreadCountUpdated: _updateUnreadCount);
+        return ConversationsScreen(onUnreadCountUpdated: _updateUnreadCount);
     }
   }
 

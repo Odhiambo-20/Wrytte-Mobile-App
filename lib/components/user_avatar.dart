@@ -6,8 +6,6 @@ class UserAvatar extends StatelessWidget {
   final ImageProvider? image;
   final String? imageUrl;
   final VoidCallback? onTap;
-  final double borderWidth;
-  final Color borderColor;
   final String? heroTag;
 
   const UserAvatar({
@@ -16,8 +14,6 @@ class UserAvatar extends StatelessWidget {
     this.image,
     this.imageUrl,
     this.onTap,
-    this.borderWidth = 2.0,
-    this.borderColor = Colors.white,
     this.heroTag,
     required String name,
   });
@@ -29,7 +25,7 @@ class UserAvatar extends StatelessWidget {
     if (image != null) {
       // Use provided ImageProvider if available
       avatarWidget = _buildAvatarContainer(image!);
-    } else if (imageUrl != null) {
+    } else if (imageUrl != null && imageUrl!.isNotEmpty) {
       // Use CachedNetworkImage if URL is provided
       avatarWidget = ClipOval(
         child: CachedNetworkImage(
@@ -42,10 +38,8 @@ class UserAvatar extends StatelessWidget {
         ),
       );
     } else {
-      // Use default asset image
-      avatarWidget = _buildAvatarContainer(
-        const AssetImage('assets/images/default_avatar.jpg'),
-      );
+      // Use new icon avatar
+      avatarWidget = _buildPlaceholder();
     }
 
     final wrappedWidget = GestureDetector(
@@ -53,10 +47,7 @@ class UserAvatar extends StatelessWidget {
       child: Container(
         width: size,
         height: size,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          border: Border.all(color: borderColor, width: borderWidth),
-        ),
+        decoration: BoxDecoration(shape: BoxShape.circle),
         child: avatarWidget,
       ),
     );
@@ -77,8 +68,17 @@ class UserAvatar extends StatelessWidget {
 
   Widget _buildPlaceholder() {
     return Container(
-      color: Colors.grey[300],
-      child: const Center(child: Icon(Icons.person, color: Colors.white)),
+      decoration: const BoxDecoration(
+        shape: BoxShape.circle,
+        color: Color(0xFF0F2A44), // dark blue background
+      ),
+      child: Center(
+        child: Icon(
+          Icons.person,
+          size: size * 0.5,
+          color: Color(0xFF4DA3FF), // light blue icon
+        ),
+      ),
     );
   }
 }

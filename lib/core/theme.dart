@@ -4,7 +4,7 @@ class WrytteTheme {
   static ThemeData lightTheme = ThemeData(
     scaffoldBackgroundColor: Colors.black,
     brightness: Brightness.dark,
-    fontFamily: 'Chirp', // Chirp as global font
+    fontFamily: 'Roboto', // Roboto as global font
     textTheme: const TextTheme(
       bodyLarge: TextStyle(color: Colors.white),
       bodyMedium: TextStyle(color: Colors.white),

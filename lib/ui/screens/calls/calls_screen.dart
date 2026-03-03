@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:wrytte/components/calls_components/call_item.dart';
 
 class CallsScreen extends StatefulWidget {
   const CallsScreen({super.key});
@@ -11,42 +10,14 @@ class CallsScreen extends StatefulWidget {
 class _CallsScreenState extends State<CallsScreen> {
   int selectedIndex = 0; // 0 = All, 1 = Missed
 
-  final List<Map<String, dynamic>> allCalls = [
-    {
-      'name': 'John Doe',
-      'time': 'Today, 9:30 AM',
-      'callType': CallType.incoming,
-      'multipleCalls': false,
-      'callCount': 1,
-      'avatarUrl': null,
-    },
-    {
-      'name': 'Jane Smith',
-      'time': 'Yesterday, 7:12 PM',
-      'callType': CallType.missed,
-      'multipleCalls': true,
-      'callCount': 3,
-      'avatarUrl': null,
-    },
-    {
-      'name': 'Alex Johnson',
-      'time': 'Monday, 3:50 PM',
-      'callType': CallType.outgoing,
-      'multipleCalls': false,
-      'callCount': 1,
-      'avatarUrl': null,
-    },
-  ];
-
-  List<Map<String, dynamic>> get missedCalls =>
-      allCalls.where((call) => call['callType'] == CallType.missed).toList();
+  final List<Map<String, dynamic>> allCalls = [];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: const Color(0xFF0F1013),
       appBar: AppBar(
-        backgroundColor: const Color.fromARGB(255, 19, 18, 18),
+        backgroundColor: const Color(0xFF0F1013),
         elevation: 0,
         leading: TextButton(
           onPressed: () {},
@@ -106,31 +77,6 @@ class _CallsScreenState extends State<CallsScreen> {
           ),
 
           // Calls list
-          Expanded(
-            child: ListView.builder(
-              itemCount:
-                  selectedIndex == 0 ? allCalls.length : missedCalls.length,
-              itemBuilder: (context, index) {
-                final call =
-                    selectedIndex == 0 ? allCalls[index] : missedCalls[index];
-
-                return CallItem(
-                  name: call['name'],
-                  time: call['time'],
-                  avatarUrl: call['avatarUrl'],
-                  callType: call['callType'],
-                  multipleCalls: call['multipleCalls'],
-                  callCount: call['callCount'],
-                  onCallPressed: () {
-                    // handle call press
-                  },
-                  onTap: () {
-                    // handle tap to see call details
-                  },
-                );
-              },
-            ),
-          ),
         ],
       ),
     );
@@ -147,8 +93,7 @@ class _CallsScreenState extends State<CallsScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
         decoration: BoxDecoration(
-          color:
-              isSelected ? Color.fromARGB(255, 19, 18, 18) : Colors.transparent,
+          color: isSelected ? Color(0xFF23262C) : Colors.transparent,
           borderRadius: BorderRadius.circular(20),
         ),
         child: Text(

@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:wrytte/models/contact_model.dart';
-import 'package:wrytte/services/contact_service.dart';
 import 'package:wrytte/components/contact_components/contact_item.dart';
-import 'package:wrytte/ui/screens/message_screen.dart';
+import 'package:wrytte/models/contact_model.dart';
+import 'package:wrytte/services/auth/auth_service.dart';
+import 'package:wrytte/services/chat/chat_service.dart';
+import 'package:wrytte/services/contacts/contact_service.dart';
+import 'package:wrytte/state/chat/chat_state.dart';
+import 'package:wrytte/ui/screens/chats/chat_screen.dart';
 
 class SelectContactScreen extends StatefulWidget {
   const SelectContactScreen({super.key});
@@ -74,22 +77,39 @@ class _SelectContactScreenState extends State<SelectContactScreen> {
     }
   }
 
-  void _navigateToMessageScreen(Contact contact) {
-    if (contact.wrytteUserId != null && contact.wrytteUserId!.isNotEmpty) {
-      Navigator.pop(context);
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder:
-              (_) => MessageScreen(
-                name: contact.formattedName,
-                receiverId: contact.wrytteUserId!,
-                avatarUrl: contact.avatarUrl,
-                isOnline: true,
-              ),
-        ),
-      );
-    }
+  String generateConversationId(String id1, String id2) {
+    final ids = [id1, id2]..sort();
+    return "${ids[0]}-${ids[1]}";
+  }
+
+  void _navigateToChatScreen(Contact contact) async {
+    if (contact.wrytteUserId == null || contact.wrytteUserId!.isEmpty) return;
+
+    final currentUserId = await AuthService.instance.getCurrentUserId() ?? "";
+
+    final chatState = ChatState(ChatService());
+    await chatState.initialize();
+
+    final conversationId = generateConversationId(
+      currentUserId,
+      contact.wrytteUserId!,
+    );
+
+    Navigator.pop(context);
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder:
+            (_) => ChatScreen(
+              conversationId: conversationId,
+              receiverId: contact.wrytteUserId!,
+              currentUserId: currentUserId,
+              title: contact.formattedName,
+              chatState: chatState,
+            ),
+      ),
+    );
   }
 
   /// GROUP CONTACTS BY FIRST LETTER
@@ -110,10 +130,10 @@ class _SelectContactScreenState extends State<SelectContactScreen> {
     return Column(
       children: [
         ListTile(
-          leading: Icon(icon, color: const Color(0xFF4EA4F6), size: 28),
+          leading: Icon(icon, color: const Color(0xFF4DA3FF), size: 28),
           title: Text(
             title,
-            style: const TextStyle(color: Color(0xFF4EA4F6), fontSize: 18),
+            style: const TextStyle(color: Color(0xFF4DA3FF), fontSize: 18),
           ),
         ),
         Padding(
@@ -127,9 +147,9 @@ class _SelectContactScreenState extends State<SelectContactScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0F0F0F),
+      backgroundColor: const Color(0xFF0F1013),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF0F0F0F),
+        backgroundColor: const Color(0xFF0F1013),
         elevation: 0,
         centerTitle: true,
         leading: IconButton(
@@ -172,7 +192,7 @@ class _SelectContactScreenState extends State<SelectContactScreen> {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          CircularProgressIndicator(color: Colors.teal),
+                          CircularProgressIndicator(color: Color(0xFF4DA3FF)),
                           SizedBox(height: 16),
                           Text(
                             'Finding your contacts on Wrytte...',
@@ -206,7 +226,7 @@ class _SelectContactScreenState extends State<SelectContactScreen> {
                               ...entry.value.map(
                                 (c) => ContactItem(
                                   contact: c,
-                                  onTap: () => _navigateToMessageScreen(c),
+                                  onTap: () => _navigateToChatScreen(c),
                                 ),
                               ),
                             ],

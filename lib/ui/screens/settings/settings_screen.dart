@@ -1,45 +1,61 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:wrytte/components/user_avatar.dart';
+import 'package:wrytte/services/auth/auth_service.dart';
+import 'package:wrytte/ui/auth/auth_entry_screen.dart';
 import 'package:wrytte/ui/screens/profile_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
 
+  /// Logout function
+  Future<void> _logout(BuildContext context) async {
+    try {
+      await AuthService.instance.logout();
+
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const AuthEntryScreen()),
+        (route) => false,
+      );
+    } catch (e) {
+      debugPrint("Logout failed: $e");
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Logout failed: $e")));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: const Color(0xFF0F1013),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF0F1013),
+        elevation: 0,
+        title: const Text(
+          "Settings",
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 24,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        centerTitle: true,
+        actions: [
+          IconButton(
+            onPressed: () {},
+            icon: const Icon(Icons.qr_code_2_rounded, color: Colors.white),
+          ),
+        ],
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // AppBar Section
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const SizedBox(width: 48),
-                  const Text(
-                    "Settings",
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: () {},
-                    icon: const Icon(
-                      Icons.qr_code_2_rounded,
-                      color: Colors.white,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-
               // Profile Section
               FutureBuilder<DocumentSnapshot>(
                 future:
@@ -61,18 +77,13 @@ class SettingsScreen extends StatelessWidget {
                         vertical: 12,
                       ),
                       decoration: BoxDecoration(
-                        color: const Color.fromARGB(255, 19, 18, 18),
+                        color: const Color(0xFF0F1013),
                         borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: Color(0xFF23262C), width: 1),
                       ),
                       child: Row(
                         children: [
-                          CircleAvatar(
-                            radius: 26,
-                            backgroundColor: Colors.grey[800],
-                            backgroundImage: const AssetImage(
-                              'assets/images/default_avatar.jpg',
-                            ),
-                          ),
+                          UserAvatar(size: 60, name: ''),
                           const SizedBox(width: 16),
                           const Text(
                             'User',
@@ -112,7 +123,7 @@ class SettingsScreen extends StatelessWidget {
                         vertical: 12,
                       ),
                       decoration: BoxDecoration(
-                        color: const Color.fromARGB(255, 19, 18, 18),
+                        color: const Color(0xFF23262C),
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Row(
@@ -182,7 +193,7 @@ class SettingsScreen extends StatelessWidget {
 
               const SizedBox(height: 20),
 
-              //  Second Card
+              // Second Card
               _buildSettingsCard(
                 context,
                 items: [
@@ -196,6 +207,28 @@ class SettingsScreen extends StatelessWidget {
                   _SettingsItem("Chats", Icons.chat_bubble_outline),
                   _SettingsItem("Data and Storage", Icons.storage_outlined),
                 ],
+              ),
+
+              const SizedBox(height: 20),
+
+              // Logout Button
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Color(0xFF0F1013),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  onPressed: () => _logout(context),
+                  icon: const Icon(Icons.logout, color: Colors.white),
+                  label: const Text(
+                    "Logout",
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                ),
               ),
 
               const SizedBox(height: 60),
@@ -213,7 +246,7 @@ class SettingsScreen extends StatelessWidget {
   }) {
     return Container(
       decoration: BoxDecoration(
-        color: const Color.fromARGB(255, 19, 18, 18),
+        color: const Color(0xFF23262C),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Column(

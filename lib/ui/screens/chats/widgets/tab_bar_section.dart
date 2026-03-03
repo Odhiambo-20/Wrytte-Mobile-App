@@ -11,7 +11,7 @@ class TabBarSection extends StatelessWidget {
         children: [
           Expanded(
             child: TabBar(
-              isScrollable: false, // Changed to false for equal distribution
+              isScrollable: false,
               labelColor: Colors.white,
               unselectedLabelColor: Colors.grey,
               indicatorColor: Colors.white,

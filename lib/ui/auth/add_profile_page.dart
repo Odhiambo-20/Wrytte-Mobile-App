@@ -1,5 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 class AddProfilePage extends StatefulWidget {
@@ -10,123 +8,148 @@ class AddProfilePage extends StatefulWidget {
 }
 
 class _AddProfilePageState extends State<AddProfilePage> {
-  final TextEditingController _nameController = TextEditingController();
-  bool _isLoading = false;
+  final TextEditingController _nicknameController = TextEditingController();
+  bool _syncContacts = true;
+  bool _isValid = false;
 
-  Future<String> _generateUsername(String name) async {
-    String base = name
-        .toLowerCase()
-        .replaceAll(RegExp(r'[^a-z0-9\s]'), '')
-        .trim()
-        .replaceAll(RegExp(r'\s+'), '.');
-
-    String username = base;
-    int counter = 1;
-
-    bool exists = await _checkIfUsernameExists(username);
-    while (exists) {
-      username = "$base$counter";
-      counter++;
-      exists = await _checkIfUsernameExists(username);
-    }
-
-    return username;
+  @override
+  void initState() {
+    super.initState();
+    _nicknameController.addListener(_validate);
   }
 
-  Future<bool> _checkIfUsernameExists(String username) async {
-    try {
-      final snapshot =
-          await FirebaseFirestore.instance
-              .collection("users")
-              .where("username", isEqualTo: username)
-              .limit(1)
-              .get();
-      return snapshot.docs.isNotEmpty;
-    } catch (e) {
-      // If there's a permissions error, assume username doesn't exist
-      // to allow the process to continue
-      return false;
-    }
+  void _validate() {
+    setState(() {
+      _isValid = _nicknameController.text.trim().length >= 2;
+    });
   }
 
-  Future<void> _saveProfile() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("User not authenticated")));
-      return;
-    }
+  void _goToHome() {
+    Navigator.pushReplacementNamed(context, '/home');
+  }
 
-    final name = _nameController.text.trim();
-    if (name.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Please enter your name")));
-      return;
-    }
-
-    setState(() => _isLoading = true);
-
-    try {
-      final username = await _generateUsername(name);
-
-      await FirebaseFirestore.instance.collection("users").doc(user.uid).set({
-        "uid": user.uid,
-        "phone": user.phoneNumber ?? "",
-        "name": name,
-        "username": username,
-        "createdAt": FieldValue.serverTimestamp(),
-      });
-
-      if (mounted) {
-        Navigator.pushReplacementNamed(context, "/homepage");
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(
-        // ignore: use_build_context_synchronously
-        context,
-      ).showSnackBar(SnackBar(content: Text("Error saving profile: $e")));
-      // ignore: avoid_print
-      print("Firestore error: $e"); // For debugging
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
+  @override
+  void dispose() {
+    _nicknameController.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Complete Your Profile")),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            const Text(
-              "Enter your name to get started",
-              style: TextStyle(fontSize: 16),
-            ),
-            const SizedBox(height: 20),
-            TextField(
-              controller: _nameController,
-              decoration: const InputDecoration(
-                labelText: "Your name",
-                border: OutlineInputBorder(),
-                hintText: "John Doe",
+      backgroundColor: const Color(0xFF0F1013),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // Top bar
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  TextButton(
+                    onPressed: _goToHome,
+                    child: const Text(
+                      "Skip",
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: _isValid ? _goToHome : null,
+                    child: Text(
+                      "Done",
+                      style: TextStyle(
+                        color:
+                            _isValid
+                                ? const Color(0xFF2AABEE) // Light blue
+                                : Colors.grey,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: _isLoading ? null : _saveProfile,
-              style: ElevatedButton.styleFrom(
-                minimumSize: const Size(double.infinity, 50),
+
+              const SizedBox(height: 40),
+
+              // Profile Circle
+              GestureDetector(
+                onTap: () {
+                  // Add image picker
+                },
+                child: CircleAvatar(
+                  radius: 50,
+                  backgroundColor: const Color(0xFF1F4F7F),
+                  child: const Icon(
+                    Icons.person,
+                    size: 50,
+                    color: Colors.white70,
+                  ),
+                ),
               ),
-              child:
-                  _isLoading
-                      ? const CircularProgressIndicator(color: Colors.white)
-                      : const Text("Save Profile"),
-            ),
-          ],
+
+              const SizedBox(height: 16),
+
+              const Text(
+                "Set profile photo",
+                style: TextStyle(color: Colors.white, fontSize: 18),
+              ),
+
+              const SizedBox(height: 40),
+
+              // Name Field
+              TextField(
+                controller: _nicknameController,
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  hintText: "Enter Name",
+                  hintStyle: const TextStyle(color: Colors.grey),
+                  filled: true,
+                  fillColor: const Color(0xFF23262C),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: BorderSide.none,
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 18,
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 10),
+
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  "Your name must include at least 2 letters or symbols",
+                  style: TextStyle(color: Colors.grey, fontSize: 13),
+                ),
+              ),
+
+              const SizedBox(height: 30),
+
+              // Sync Contacts
+              Row(
+                children: [
+                  Checkbox(
+                    value: _syncContacts,
+                    activeColor: const Color(0xFF2AABEE),
+                    onChanged: (value) {
+                      setState(() {
+                        _syncContacts = value ?? true;
+                      });
+                    },
+                  ),
+                  const Text(
+                    "Sync contacts",
+                    style: TextStyle(color: Colors.white, fontSize: 16),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );

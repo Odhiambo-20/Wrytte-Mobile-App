@@ -1,11 +1,9 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:wrytte/services/auth/auth_service.dart';
 import 'package:wrytte/ui/auth/country_picker_page.dart';
+import 'package:wrytte/ui/screens/terms_privacy_page.dart';
 import 'package:wrytte/utils/countries.dart';
-import 'package:wrytte/ui/auth/phone_auth_page.dart';
-import 'otp_verification_page.dart';
 
 class SignInPage extends StatefulWidget {
   const SignInPage({super.key});
@@ -15,324 +13,350 @@ class SignInPage extends StatefulWidget {
 }
 
 class _SignInPageState extends State<SignInPage> {
-  final _formKey = GlobalKey<FormState>();
-  Country? _selectedCountry;
-  final TextEditingController _numberCtrl = TextEditingController();
-  bool _isSending = false;
-  bool _isCheckingNumber = false;
-  String? _numberError;
+  final TextEditingController _wrytteIdCtrl = TextEditingController();
+  final TextEditingController _emailCtrl = TextEditingController();
+  final TextEditingController _phoneCtrl = TextEditingController();
 
+  Country? _selectedCountry;
+
+  bool _isLoading = false;
+
+  /// helpers
   String get _dialCode => _selectedCountry?.dialCode ?? '';
-  String get _fullPhone =>
-      _dialCode.isEmpty ? '' : '+$_dialCode${_numberCtrl.text.trim()}';
+
+  String get _fullPhone {
+    if (_selectedCountry == null) return '';
+    final raw = _phoneCtrl.text.trim();
+    final normalized = raw.startsWith('0') ? raw.substring(1) : raw;
+    return '+$_dialCode$normalized';
+  }
+
+  bool get _phoneValid =>
+      _selectedCountry != null && _phoneCtrl.text.trim().length >= 8;
+
+  bool get _wrytteValid =>
+      _wrytteIdCtrl.text.trim().isNotEmpty &&
+      _emailCtrl.text.trim().contains("@");
 
   Future<void> _pickCountry() async {
-    final result = await Navigator.of(context).push<Country>(
+    final result = await Navigator.push<Country>(
+      context,
       MaterialPageRoute(builder: (_) => const CountryPickerPage()),
     );
+
     if (result != null) {
       setState(() => _selectedCountry = result);
     }
   }
 
-  Future<bool> _isPhoneNumberRegistered(String phoneNumber) async {
-    try {
-      final snapshot =
-          await FirebaseFirestore.instance
-              .collection('users')
-              .where('phone', isEqualTo: phoneNumber)
-              .limit(1)
-              .get();
+  /// WRYTTE ID LOGIN
 
-      return snapshot.docs.isNotEmpty;
-    } catch (e) {
-      debugPrint('Error checking phone number: $e');
-      return false;
-    }
-  }
+  Future<void> _loginWithWrytteId() async {
+    if (!_wrytteValid || _isLoading) return;
 
-  Future<void> _startSignIn() async {
-    final valid = _formKey.currentState?.validate() ?? false;
-    if (!valid || _isSending) return;
-
-    setState(() {
-      _isSending = true;
-      _numberError = null;
-    });
+    setState(() => _isLoading = true);
 
     try {
-      // Check if phone number is registered
-      setState(() => _isCheckingNumber = true);
-      final isRegistered = await _isPhoneNumberRegistered(_fullPhone);
-      setState(() => _isCheckingNumber = false);
+      /// send login email code
+      await AuthService.instance.sendEmailCode(_emailCtrl.text.trim());
 
-      if (!isRegistered) {
-        setState(() {
-          _numberError = 'This number is not registered. Please sign up first.';
-          _isSending = false;
-        });
-        return;
-      }
+      if (!mounted) return;
 
-      await FirebaseAuth.instance.verifyPhoneNumber(
-        phoneNumber: _fullPhone,
-        timeout: const Duration(seconds: 60),
-        verificationCompleted: (credential) {
-          // Auto-sign in if verification completes automatically
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Verification code sent to your email"),
+          backgroundColor: Colors.green,
+        ),
+      );
+
+      Navigator.pushNamed(
+        context,
+        "/login_email_verification_page",
+        arguments: {
+          "email": _emailCtrl.text.trim(),
+          "wrytteId": _wrytteIdCtrl.text.trim(),
         },
-        verificationFailed: (e) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(e.message ?? 'Verification failed'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        },
-        codeSent: (verificationId, _) async {
-          try {
-            await FirebaseFirestore.instance
-                .collection('auth_requests')
-                .doc(verificationId)
-                .set({
-                  'phone': _fullPhone,
-                  'country': _selectedCountry?.name,
-                  'isoCode': _selectedCountry?.isoCode,
-                  'dialCode': _dialCode,
-                  'status': 'codeSent',
-                  'isSignIn': true,
-                  'createdAt': FieldValue.serverTimestamp(),
-                });
-          } catch (_) {}
-
-          if (!mounted) return;
-
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder:
-                  (_) => OtpVerificationPage(
-                    verificationId: verificationId,
-                    phoneNumber: _fullPhone,
-                    isSignInFlow: true,
-                  ),
-            ),
-          );
-        },
-        codeAutoRetrievalTimeout: (_) {},
       );
     } catch (e) {
-      // ignore: use_build_context_synchronously
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        SnackBar(
+          content: Text("Login failed: $e"),
+          backgroundColor: Colors.red,
+        ),
       );
     } finally {
-      if (mounted) setState(() => _isSending = false);
+      setState(() => _isLoading = false);
     }
   }
 
-  void _navigateToSignUp() {
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (_) => const PhoneAuthPage()),
-    );
+  /// PHONE LOGIN
+
+  Future<void> _loginWithPhone() async {
+    if (!_phoneValid || _isLoading) return;
+
+    setState(() => _isLoading = true);
+
+    try {
+      /// send sms login code
+      await AuthService.instance.sendSmsCode(_fullPhone);
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("SMS verification code sent"),
+          backgroundColor: Colors.green,
+        ),
+      );
+
+      Navigator.pushNamed(
+        context,
+        "/login_otp_page",
+        arguments: {"phone": _fullPhone},
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Failed to send login code: $e"),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      setState(() => _isLoading = false);
+    }
   }
 
   @override
   void dispose() {
-    _numberCtrl.dispose();
+    _wrytteIdCtrl.dispose();
+    _emailCtrl.dispose();
+    _phoneCtrl.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black),
-          onPressed: () => Navigator.pop(context),
-        ),
-      ),
+      backgroundColor: const Color(0xFF0F1013),
       body: SafeArea(
-        child: Form(
-          key: _formKey,
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+          child: Column(
             children: [
-              const SizedBox(height: 16),
-              Text(
-                'Sign in to Wrytte',
-                textAlign: TextAlign.center,
-                style: theme.textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w700,
+              /// BACK
+              Align(
+                alignment: Alignment.centerLeft,
+                child: IconButton(
+                  icon: const Icon(Icons.arrow_back, color: Colors.white),
+                  onPressed: () => Navigator.pop(context),
                 ),
               ),
-              const SizedBox(height: 10),
-              Text(
-                'Enter your phone number to sign in to your account',
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: Colors.black54,
-                  height: 1.3,
-                ),
-              ),
-              const SizedBox(height: 28),
 
-              // Country selector
-              GestureDetector(
-                onTap: _pickCountry,
-                child: Container(
-                  height: 56,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
+              const SizedBox(height: 20),
+
+              const Text(
+                "Sign In",
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 26,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+
+              const SizedBox(height: 30),
+
+              /// WRYTTE LOGIN CARD
+              Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFF23262C),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 14,
+                ),
+                child: Column(
+                  children: [
+                    TextField(
+                      controller: _wrytteIdCtrl,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: const InputDecoration(
+                        hintText: "Wrytte ID",
+                        hintStyle: TextStyle(color: Colors.white38),
+                        border: InputBorder.none,
+                      ),
+                      onChanged: (_) => setState(() {}),
+                    ),
+
+                    const Divider(color: Colors.white24),
+
+                    TextField(
+                      controller: _emailCtrl,
+                      keyboardType: TextInputType.emailAddress,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: const InputDecoration(
+                        hintText: "Email",
+                        hintStyle: TextStyle(color: Colors.white38),
+                        border: InputBorder.none,
+                      ),
+                      onChanged: (_) => setState(() {}),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              /// WRYTTE LOGIN BUTTON
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: _wrytteValid ? _loginWithWrytteId : null,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor:
+                        _wrytteValid
+                            ? const Color(0xFF4DA3FF)
+                            : const Color(0xFF23262C),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
                   ),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    border: Border.all(color: const Color(0xFFE0E0E0)),
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          _selectedCountry == null
-                              ? 'Country'
-                              : '${_selectedCountry!.flag} ${_selectedCountry!.name}',
-                          style: TextStyle(
-                            fontSize: 16,
-                            color:
-                                _selectedCountry == null
-                                    ? Colors.black38
-                                    : Colors.black87,
-                            fontWeight: FontWeight.w500,
+                  child:
+                      _isLoading
+                          ? const CircularProgressIndicator(color: Colors.white)
+                          : const Text(
+                            "Continue",
+                            style: TextStyle(color: Colors.white),
                           ),
+                ),
+              ),
+
+              const SizedBox(height: 30),
+
+              const Text(
+                "OR",
+                style: TextStyle(color: Colors.white54, fontSize: 14),
+              ),
+
+              const SizedBox(height: 30),
+
+              /// PHONE LOGIN
+              Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFF23262C),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Column(
+                  children: [
+                    ListTile(
+                      onTap: _pickCountry,
+                      title: Text(
+                        _selectedCountry == null
+                            ? "Country"
+                            : "${_selectedCountry!.flag} ${_selectedCountry!.name}",
+                        style: TextStyle(
+                          color:
+                              _selectedCountry == null
+                                  ? Colors.white38
+                                  : Colors.white,
                         ),
                       ),
-                      const Icon(Icons.chevron_right, color: Colors.black45),
-                    ],
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 18),
-
-              // Phone number field
-              TextFormField(
-                controller: _numberCtrl,
-                keyboardType: TextInputType.phone,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                style: const TextStyle(fontSize: 18, color: Colors.black),
-                decoration: InputDecoration(
-                  labelText: 'Phone number',
-                  labelStyle: const TextStyle(color: Colors.black87),
-                  prefixText: _dialCode.isEmpty ? '' : '+$_dialCode ',
-                  prefixStyle: const TextStyle(
-                    fontSize: 18,
-                    color: Colors.black87,
-                    fontWeight: FontWeight.w500,
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 18,
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(14),
-                    borderSide: BorderSide(
-                      color:
-                          _numberError != null ? Colors.red : Color(0xFF42A5F5),
-                    ),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(14),
-                    borderSide: BorderSide(
-                      color:
-                          _numberError != null ? Colors.red : Color(0xFF1E88E5),
-                      width: 2,
-                    ),
-                  ),
-                  errorText: _numberError,
-                ),
-                validator: (_) {
-                  if (_selectedCountry == null) {
-                    return 'Select a country';
-                  }
-                  final n = _numberCtrl.text.trim();
-                  if (n.isEmpty) return 'Enter your number';
-                  if (n.length < 6) return 'Number looks too short';
-                  if (n.length > 15) return 'Number looks too long';
-                  return null;
-                },
-              ),
-
-              const SizedBox(height: 32),
-
-              Align(
-                alignment: Alignment.centerRight,
-                child: SizedBox(
-                  height: 64,
-                  width: 64,
-                  child: ElevatedButton(
-                    onPressed:
-                        (_isSending ||
-                                _selectedCountry == null ||
-                                _isCheckingNumber)
-                            ? null
-                            : _startSignIn,
-                    style: ElevatedButton.styleFrom(
-                      shape: const CircleBorder(),
-                      backgroundColor: const Color(0xFF64B5F6),
-                      elevation: 2,
-                    ),
-                    child:
-                        _isSending || _isCheckingNumber
-                            ? const SizedBox(
-                              height: 22,
-                              width: 22,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2.6,
-                                valueColor: AlwaysStoppedAnimation<Color>(
-                                  Colors.white,
-                                ),
-                              ),
-                            )
-                            : const Icon(
-                              Icons.arrow_forward,
-                              color: Colors.white,
-                            ),
-                  ),
-                ),
-              ),
-
-              // Sign up option
-              const SizedBox(height: 40),
-              Divider(height: 1, color: Colors.grey[300]),
-              const SizedBox(height: 24),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    'New to Wrytte?',
-                    style: TextStyle(color: Colors.grey[600], fontSize: 14),
-                  ),
-                  const SizedBox(width: 8),
-                  TextButton(
-                    onPressed: _navigateToSignUp,
-                    style: TextButton.styleFrom(
-                      padding: EdgeInsets.zero,
-                      minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                    child: const Text(
-                      'Create account',
-                      style: TextStyle(
-                        color: Color(0xFF1E88E5),
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
+                      trailing: const Icon(
+                        Icons.chevron_right,
+                        color: Colors.white54,
                       ),
+                    ),
+
+                    const Divider(color: Colors.white12, height: 1),
+
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                      child: Row(
+                        children: [
+                          if (_selectedCountry != null)
+                            Text(
+                              "+$_dialCode",
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                              ),
+                            ),
+
+                          if (_selectedCountry != null)
+                            const SizedBox(width: 10),
+
+                          Expanded(
+                            child: TextField(
+                              controller: _phoneCtrl,
+                              keyboardType: TextInputType.number,
+                              inputFormatters: [
+                                FilteringTextInputFormatter.digitsOnly,
+                              ],
+                              style: const TextStyle(color: Colors.white),
+                              decoration: const InputDecoration(
+                                hintText: "Phone number",
+                                hintStyle: TextStyle(color: Colors.white38),
+                                border: InputBorder.none,
+                              ),
+                              onChanged: (_) => setState(() {}),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              /// PHONE LOGIN BUTTON
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: _phoneValid ? _loginWithPhone : null,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor:
+                        _phoneValid
+                            ? const Color(0xFF4DA3FF)
+                            : const Color(0xFF23262C),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  child: const Text(
+                    "Continue",
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 20),
+
+              /// TERMS
+              Wrap(
+                children: [
+                  const Text(
+                    "By signing in you agree to ",
+                    style: TextStyle(color: Colors.white70),
+                  ),
+                  GestureDetector(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const TermsPrivacyPage(),
+                        ),
+                      );
+                    },
+                    child: const Text(
+                      "Wrytte’s Terms and Conditions and Privacy Policy",
+                      style: TextStyle(color: Color(0xFF4DA3FF)),
                     ),
                   ),
                 ],

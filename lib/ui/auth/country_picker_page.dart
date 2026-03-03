@@ -46,10 +46,11 @@ class _CountryPickerPageState extends State<CountryPickerPage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Scaffold(
+      backgroundColor: const Color(0xFF0F1013),
       appBar: AppBar(
-        title: const Text('Choose a country'),
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black87,
+        title: const Text('Country', style: TextStyle(fontSize: 18)),
+        backgroundColor: const Color(0xFF0F1013),
+        foregroundColor: Colors.white,
         elevation: 0.5,
         actions: [
           SizedBox(
@@ -66,7 +67,7 @@ class _CountryPickerPageState extends State<CountryPickerPage> {
                   ),
                   isDense: true,
                   filled: true,
-                  fillColor: const Color(0xFFF5F5F5),
+                  fillColor: const Color(0xFF23262C),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
                     borderSide: BorderSide.none,
@@ -88,7 +89,7 @@ class _CountryPickerPageState extends State<CountryPickerPage> {
             trailing: Text(
               '+${c.dialCode}',
               style: theme.textTheme.bodyMedium?.copyWith(
-                color: Colors.blue[700],
+                color: Color(0xFF4DA3FF),
                 fontWeight: FontWeight.w600,
               ),
             ),

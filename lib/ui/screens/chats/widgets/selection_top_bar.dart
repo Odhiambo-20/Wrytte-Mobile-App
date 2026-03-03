@@ -27,7 +27,7 @@ class SelectionTopBar extends StatelessWidget {
     if (!isVisible) return const SizedBox.shrink();
 
     return Container(
-      color: const Color.fromARGB(255, 19, 18, 18),
+      color: const Color(0xFF0F1013),
       child: SafeArea(
         bottom: false,
         child: Padding(
@@ -43,7 +43,7 @@ class SelectionTopBar extends StatelessWidget {
                     onPressed: onClose,
                     icon: const Icon(
                       Icons.arrow_back,
-                      color: Colors.lightBlue,
+                      color: Color(0xFF4DA3FF),
                       size: 24,
                     ),
                     padding: EdgeInsets.zero,
@@ -61,7 +61,7 @@ class SelectionTopBar extends StatelessWidget {
                       fontWeight: FontWeight.w500,
                     ),
                   ),
-                  const SizedBox(width: 16), // Spacing before action buttons
+                  const SizedBox(width: 16),
                 ],
               ),
 
