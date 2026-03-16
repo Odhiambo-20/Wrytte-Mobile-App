@@ -90,10 +90,8 @@ class _LoginOtpPageState extends State<LoginOtpPage>
 
       /// STEP 2: Login using returned secret
       await AuthService.instance.login(
-        phone: widget.phoneNumber,
         secret: user.secret,
         userid: user.userId,
-        username: user.username,
       );
 
       if (!mounted) return;

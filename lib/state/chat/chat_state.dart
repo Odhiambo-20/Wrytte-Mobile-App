@@ -42,7 +42,9 @@ class ChatState {
       _messageSubscription = _chatService.messageStream.listen(
         _handleIncomingMessage,
       );
+
       _errorSubscription = _chatService.errorStream.listen(_handleError);
+
       _connectionSubscription = _chatService.connectionStream.listen((
         isConnected,
       ) {
@@ -57,16 +59,16 @@ class ChatState {
         _conversations
           ..clear()
           ..addAll(convs);
+
         _conversationsController.add(List.unmodifiable(_conversations));
 
-        // Auto-update messages for active conversation
         if (_activeConversationId != null) {
           _updateActiveConversationMessages();
         }
       });
 
-      await _chatService.connect();
-      await _chatService.fetchRecentConversations();
+      // Load initial messages which builds conversations
+      await _chatService.fetchMessages();
 
       _loadingController.add(false);
     } catch (e) {

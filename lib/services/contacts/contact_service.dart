@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_contacts/flutter_contacts.dart' as fc;
 import 'package:permission_handler/permission_handler.dart';
@@ -16,11 +17,15 @@ class ContactService {
   String _normalizePhone(String phone) {
     String cleaned = phone.replaceAll(RegExp(r'[^\d+]'), '');
 
-    if (cleaned.startsWith('00')) {
-      cleaned = '+${cleaned.substring(2)}';
+    if (cleaned.startsWith('0')) {
+      cleaned = '+256${cleaned.substring(1)}';
     }
 
-    if (!cleaned.startsWith('+') && cleaned.length >= 9) {
+    if (cleaned.startsWith('256')) {
+      cleaned = '+$cleaned';
+    }
+
+    if (!cleaned.startsWith('+')) {
       cleaned = '+$cleaned';
     }
 
@@ -47,7 +52,7 @@ class ContactService {
       for (var p in c.phones) {
         final normalized = _normalizePhone(p.number);
 
-        if (normalized.isNotEmpty) {
+        if (normalized.length >= 10) {
           phones.add(normalized);
         }
       }
@@ -59,7 +64,7 @@ class ContactService {
       }
     }
 
-    debugPrint("Loaded ${contacts.length} contacts");
+    debugPrint("Loaded ${contacts.length} device contacts");
 
     return contacts;
   }
@@ -67,47 +72,68 @@ class ContactService {
   Future<List<Contact>> getWrytteContactsOptimized() async {
     final deviceContacts = await getDeviceContacts();
 
-    final allPhones = deviceContacts.expand((c) => c.phones).toSet().toList();
+    final allPhones =
+        deviceContacts
+            .expand((c) => c.phones)
+            .where((p) => p.length >= 10)
+            .toSet()
+            .toList();
 
     if (allPhones.isEmpty) return [];
 
     final token = await AuthService.instance.getToken();
 
-    final users = await _userSearchService.searchUsersByPhones(
-      allPhones,
-      token!,
-    );
+    if (token == null || token.isEmpty) {
+      throw Exception("User not authenticated");
+    }
 
-    final Map<String, Map<String, dynamic>> phoneUserMap = {};
+    final Map<String, String> phoneUserMap = {};
 
-    for (final user in users) {
-      final phone = user["phoneNumber"];
+    try {
+      const batchSize = 200;
 
-      if (phone != null) {
-        phoneUserMap[phone] = user;
+      for (int i = 0; i < allPhones.length; i += batchSize) {
+        final batch = allPhones.skip(i).take(batchSize).toList();
+
+        debugPrint("Sending ${batch.length} phones to API");
+
+        final phonesString = batch.join('|');
+
+        final result = await _userSearchService.searchUsersByPhones(
+          phoneNumbersC: phonesString,
+          token: token,
+        );
+
+        phoneUserMap.addAll(result);
       }
+    } catch (e) {
+      debugPrint("User search failed: $e");
     }
 
     final List<Contact> wrytteContacts = [];
 
     for (final deviceContact in deviceContacts) {
       for (final phone in deviceContact.phones) {
-        final user = phoneUserMap[phone];
+        final normalizedPhone = _normalizePhone(phone);
 
-        if (user != null) {
+        final userId = phoneUserMap[normalizedPhone];
+
+        if (userId != null) {
           wrytteContacts.add(
             Contact(
               displayName: deviceContact.displayName,
               phones: deviceContact.phones,
-              avatarUrl: null,
+              avatarUrl: deviceContact.avatarUrl,
               isOnWrytte: true,
-              wrytteUserId: user["userid"].toString(),
+              wrytteUserId: userId,
             ),
           );
           break;
         }
       }
     }
+
+    debugPrint("Found ${wrytteContacts.length} Wrytte contacts");
 
     return wrytteContacts;
   }
@@ -118,8 +144,13 @@ class ContactService {
 
     final wryttePhones = wrytteContacts.expand((c) => c.phones).toSet();
 
-    return deviceContacts
-        .where((c) => !c.phones.any((p) => wryttePhones.contains(p)))
-        .toList();
+    final nonWrytte =
+        deviceContacts
+            .where((c) => !c.phones.any((p) => wryttePhones.contains(p)))
+            .toList();
+
+    debugPrint("Found ${nonWrytte.length} non-Wrytte contacts");
+
+    return nonWrytte;
   }
 }

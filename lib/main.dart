@@ -18,6 +18,7 @@ import 'package:wrytte/ui/widgets/theme_wrapper.dart';
 
 import 'package:wrytte/services/call_listener_service.dart';
 import 'package:wrytte/services/auth/auth_service.dart';
+import 'package:wrytte/services/chat/chat_service.dart'; // ⭐ NEW
 
 import 'firebase_options.dart';
 import 'core/theme.dart';
@@ -125,9 +126,12 @@ class AuthWrapper extends StatefulWidget {
 class _AuthWrapperState extends State<AuthWrapper> {
   bool _isLoading = true;
   bool _isLoggedIn = false;
-  String? _currentUserId; // <-- Store logged-in user ID
+  String? _currentUserId;
 
   final CallListenerService _callListener = CallListenerService();
+
+  /// ⭐ GLOBAL CHAT SERVICE INSTANCE
+  final ChatService _chatService = ChatService();
 
   @override
   void initState() {
@@ -138,6 +142,10 @@ class _AuthWrapperState extends State<AuthWrapper> {
   @override
   void dispose() {
     _callListener.stopListening();
+
+    /// Optional safety
+    _chatService.disconnect();
+
     super.dispose();
   }
 
@@ -147,11 +155,18 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
       if (!mounted) return;
 
-      // Get the current user from AuthService
       final currentUser = await AuthService.instance.getCurrentUser();
       final userId = currentUser?.userId;
 
       if (loggedIn && userId != null) {
+        /// ⭐ CONNECT CHAT SERVICE ONCE
+        try {
+          await _chatService.connect();
+          debugPrint("ChatService connected successfully");
+        } catch (e) {
+          debugPrint("ChatService connection error: $e");
+        }
+
         setState(() {
           _isLoggedIn = true;
           _isLoading = false;
@@ -196,7 +211,6 @@ class _AuthWrapperState extends State<AuthWrapper> {
       return const AuthEntryScreen();
     }
 
-    // Pass currentUserId to HomeScreen
     return HomeScreen(currentUserId: _currentUserId!);
   }
 }

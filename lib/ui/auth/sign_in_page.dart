@@ -1,8 +1,13 @@
+// lib/ui/auth/sign_in_page.dart
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:wrytte/services/auth/auth_service.dart';
+import 'package:wrytte/services/auth/real_number_service.dart';
 import 'package:wrytte/ui/auth/country_picker_page.dart';
-import 'package:wrytte/ui/screens/terms_privacy_page.dart';
+import 'package:wrytte/ui/auth/otp_verification_page.dart';
+import 'package:wrytte/ui/auth/phone_auth_page.dart';
+import 'package:wrytte/ui/screens/home_screen.dart';
 import 'package:wrytte/utils/countries.dart';
 
 class SignInPage extends StatefulWidget {
@@ -13,34 +18,86 @@ class SignInPage extends StatefulWidget {
 }
 
 class _SignInPageState extends State<SignInPage> {
-  final TextEditingController _wrytteIdCtrl = TextEditingController();
-  final TextEditingController _emailCtrl = TextEditingController();
-  final TextEditingController _phoneCtrl = TextEditingController();
-
   Country? _selectedCountry;
+  final TextEditingController _phoneController = TextEditingController();
+  final RealNumberService _realNumberService = RealNumberService();
+  final AuthService _authService = AuthService.instance;
 
   bool _isLoading = false;
+  bool _isCheckingStoredUser = true;
+  String? _storedPhone;
+  String? _errorMessage;
 
-  /// helpers
+  /// Dial code
   String get _dialCode => _selectedCountry?.dialCode ?? '';
 
+  /// Full phone with normalization (remove leading 0)
   String get _fullPhone {
     if (_selectedCountry == null) return '';
-    final raw = _phoneCtrl.text.trim();
+    final raw = _phoneController.text.trim();
     final normalized = raw.startsWith('0') ? raw.substring(1) : raw;
     return '+$_dialCode$normalized';
   }
 
-  bool get _phoneValid =>
-      _selectedCountry != null && _phoneCtrl.text.trim().length >= 8;
+  /// Validation: country selected + phone >= 8 digits
+  bool get _isValid =>
+      _selectedCountry != null && _phoneController.text.trim().length >= 8;
 
-  bool get _wrytteValid =>
-      _wrytteIdCtrl.text.trim().isNotEmpty &&
-      _emailCtrl.text.trim().contains("@");
+  @override
+  void initState() {
+    super.initState();
+    _checkStoredUser();
+  }
 
+  /// Check if there's a stored user and pre-fill phone if available
+  Future<void> _checkStoredUser() async {
+    setState(() => _isCheckingStoredUser = true);
+
+    try {
+      final storedPhone = await _authService.getSavedPhone();
+      final user = await _authService.getCurrentUser();
+
+      if (storedPhone != null && storedPhone.isNotEmpty && mounted) {
+        setState(() {
+          _storedPhone = storedPhone;
+        });
+
+        // Parse the stored phone to pre-fill country and number
+        _parseStoredPhone(storedPhone);
+      }
+    } catch (e) {
+      debugPrint("Error checking stored user: $e");
+    } finally {
+      if (mounted) {
+        setState(() => _isCheckingStoredUser = false);
+      }
+    }
+  }
+
+  /// Parse stored phone (e.g., "+256123456789") to extract country and number
+  void _parseStoredPhone(String fullPhone) {
+    // Try to find matching country by dial code
+    for (var country in countries) {
+      if (fullPhone.startsWith('+${country.dialCode}')) {
+        setState(() {
+          _selectedCountry = country;
+          // Extract the number part without country code and +
+          final numberPart = fullPhone.substring(country.dialCode.length + 1);
+          _phoneController.text = numberPart;
+        });
+        return;
+      }
+    }
+
+    // If no matching country found, just show the phone
+    setState(() {
+      _phoneController.text = fullPhone.replaceAll('+', '');
+    });
+  }
+
+  /// Pick country
   Future<void> _pickCountry() async {
-    final result = await Navigator.push<Country>(
-      context,
+    final result = await Navigator.of(context).push<Country>(
       MaterialPageRoute(builder: (_) => const CountryPickerPage()),
     );
 
@@ -49,88 +106,116 @@ class _SignInPageState extends State<SignInPage> {
     }
   }
 
-  /// WRYTTE ID LOGIN
+  /// Direct sign-in using stored secret
+  Future<void> _signInWithStoredSecret() async {
+    if (!_isValid || _isLoading) return;
 
-  Future<void> _loginWithWrytteId() async {
-    if (!_wrytteValid || _isLoading) return;
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
 
-    setState(() => _isLoading = true);
+    HapticFeedback.lightImpact();
 
     try {
-      /// send login email code
-      await AuthService.instance.sendEmailCode(_emailCtrl.text.trim());
+      // Get the stored user which contains the secret
+      final storedUser = await _authService.getCurrentUser();
+
+      if (storedUser == null) {
+        throw Exception("No stored credentials found. Please register first.");
+      }
+
+      debugPrint(
+        "Attempting sign-in with stored secret for phone: $_fullPhone",
+      );
+      debugPrint("Stored user ID: ${storedUser.userId}");
+      debugPrint("Stored username: ${storedUser.username}");
+
+      // Attempt login using stored secret and the entered phone number
+      final user = await _authService.login(
+        secret: storedUser.secret,
+        phone: _fullPhone, // Use the phone they just entered
+        userid: storedUser.userId,
+        username: storedUser.username.isNotEmpty ? storedUser.username : null,
+      );
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Verification code sent to your email"),
-          backgroundColor: Colors.green,
-        ),
-      );
-
-      Navigator.pushNamed(
+      // Success - navigate to home
+      Navigator.pushAndRemoveUntil(
         context,
-        "/login_email_verification_page",
-        arguments: {
-          "email": _emailCtrl.text.trim(),
-          "wrytteId": _wrytteIdCtrl.text.trim(),
-        },
+        MaterialPageRoute(builder: (_) => HomeScreen(currentUserId: '')),
+        (_) => false,
       );
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("Login failed: $e"),
-          backgroundColor: Colors.red,
-        ),
-      );
-    } finally {
-      setState(() => _isLoading = false);
+      HapticFeedback.heavyImpact();
+
+      String errorMsg = e.toString().replaceAll('ApiException: ', '');
+
+      if (errorMsg.contains('401') ||
+          errorMsg.contains('403') ||
+          errorMsg.contains('Invalid')) {
+        errorMsg =
+            "Incorrect phone number or credentials. Please verify your phone number.";
+      } else if (errorMsg.isEmpty) {
+        errorMsg = "Sign in failed. Please try again.";
+      }
+
+      setState(() {
+        _errorMessage = errorMsg;
+        _isLoading = false;
+      });
     }
   }
 
-  /// PHONE LOGIN
+  /// Fallback: Send OTP for verification (if stored secret doesn't work)
+  Future<void> _sendOtpAndVerify() async {
+    if (!_isValid || _isLoading) return;
 
-  Future<void> _loginWithPhone() async {
-    if (!_phoneValid || _isLoading) return;
-
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
 
     try {
-      /// send sms login code
-      await AuthService.instance.sendSmsCode(_fullPhone);
+      // Send OTP
+      await _realNumberService.sendSmsCode(_fullPhone);
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("SMS verification code sent"),
-          backgroundColor: Colors.green,
-        ),
-      );
-
-      Navigator.pushNamed(
+      // Navigate to OTP verification with sign-in flow
+      Navigator.push(
         context,
-        "/login_otp_page",
-        arguments: {"phone": _fullPhone},
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("Failed to send login code: $e"),
-          backgroundColor: Colors.red,
+        MaterialPageRoute(
+          builder:
+              (_) => OtpVerificationPage(
+                phoneNumber: _fullPhone,
+                isSignInFlow: true, // This tells OTP page it's for sign-in
+              ),
         ),
+      ).then((_) {
+        // When returning from OTP page, reset loading state
+        if (mounted) {
+          setState(() => _isLoading = false);
+        }
+      });
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _errorMessage = "Failed to send verification code. Please try again.";
+        _isLoading = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(_errorMessage!), backgroundColor: Colors.red),
       );
-    } finally {
-      setState(() => _isLoading = false);
     }
   }
 
   @override
   void dispose() {
-    _wrytteIdCtrl.dispose();
-    _emailCtrl.dispose();
-    _phoneCtrl.dispose();
+    _phoneController.dispose();
     super.dispose();
   }
 
@@ -138,232 +223,370 @@ class _SignInPageState extends State<SignInPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF0F1013),
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: const Text(
+          "Sign In",
+          style: TextStyle(color: Colors.white, fontSize: 20),
+        ),
+        centerTitle: true,
+      ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
-          child: Column(
-            children: [
-              /// BACK
-              Align(
-                alignment: Alignment.centerLeft,
-                child: IconButton(
-                  icon: const Icon(Icons.arrow_back, color: Colors.white),
-                  onPressed: () => Navigator.pop(context),
-                ),
-              ),
-
-              const SizedBox(height: 20),
-
-              const Text(
-                "Sign In",
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 26,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-
-              const SizedBox(height: 30),
-
-              /// WRYTTE LOGIN CARD
-              Container(
-                decoration: BoxDecoration(
-                  color: const Color(0xFF23262C),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 14,
-                ),
-                child: Column(
-                  children: [
-                    TextField(
-                      controller: _wrytteIdCtrl,
-                      style: const TextStyle(color: Colors.white),
-                      decoration: const InputDecoration(
-                        hintText: "Wrytte ID",
-                        hintStyle: TextStyle(color: Colors.white38),
-                        border: InputBorder.none,
+        child:
+            _isCheckingStoredUser
+                ? const Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      CircularProgressIndicator(color: Color(0xFF4DA3FF)),
+                      SizedBox(height: 16),
+                      Text(
+                        "Checking for existing account...",
+                        style: TextStyle(color: Colors.white70),
                       ),
-                      onChanged: (_) => setState(() {}),
-                    ),
-
-                    const Divider(color: Colors.white24),
-
-                    TextField(
-                      controller: _emailCtrl,
-                      keyboardType: TextInputType.emailAddress,
-                      style: const TextStyle(color: Colors.white),
-                      decoration: const InputDecoration(
-                        hintText: "Email",
-                        hintStyle: TextStyle(color: Colors.white38),
-                        border: InputBorder.none,
-                      ),
-                      onChanged: (_) => setState(() {}),
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 16),
-
-              /// WRYTTE LOGIN BUTTON
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: _wrytteValid ? _loginWithWrytteId : null,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor:
-                        _wrytteValid
-                            ? const Color(0xFF4DA3FF)
-                            : const Color(0xFF23262C),
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
+                    ],
                   ),
-                  child:
-                      _isLoading
-                          ? const CircularProgressIndicator(color: Colors.white)
-                          : const Text(
-                            "Continue",
-                            style: TextStyle(color: Colors.white),
+                )
+                : SingleChildScrollView(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SizedBox(height: 20),
+
+                      // Info text
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF4DA3FF).withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: const Color(0xFF4DA3FF).withOpacity(0.3),
                           ),
-                ),
-              ),
-
-              const SizedBox(height: 30),
-
-              const Text(
-                "OR",
-                style: TextStyle(color: Colors.white54, fontSize: 14),
-              ),
-
-              const SizedBox(height: 30),
-
-              /// PHONE LOGIN
-              Container(
-                decoration: BoxDecoration(
-                  color: const Color(0xFF23262C),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Column(
-                  children: [
-                    ListTile(
-                      onTap: _pickCountry,
-                      title: Text(
-                        _selectedCountry == null
-                            ? "Country"
-                            : "${_selectedCountry!.flag} ${_selectedCountry!.name}",
-                        style: TextStyle(
-                          color:
-                              _selectedCountry == null
-                                  ? Colors.white38
-                                  : Colors.white,
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.info_outline,
+                              color: Color(0xFF4DA3FF),
+                              size: 24,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    "Quick Sign In",
+                                    style: TextStyle(
+                                      color: Color(0xFF4DA3FF),
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  const Text(
+                                    "Enter your phone number to sign in with your existing account",
+                                    style: TextStyle(
+                                      color: Colors.white70,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      trailing: const Icon(
-                        Icons.chevron_right,
-                        color: Colors.white54,
-                      ),
-                    ),
 
-                    const Divider(color: Colors.white12, height: 1),
+                      const SizedBox(height: 30),
 
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
+                      // Stored account indicator
+                      if (_storedPhone != null) ...[
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF23262C),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: Colors.green.withOpacity(0.1),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.check_circle,
+                                  color: Colors.green,
+                                  size: 20,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      "Existing Account Detected",
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                    Text(
+                                      "We found an account with phone: $_storedPhone",
+                                      style: const TextStyle(
+                                        color: Colors.white54,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                      ],
+
+                      // Phone number entry (similar to PhoneAuthPage)
+                      const Text(
+                        "Phone number",
+                        style: TextStyle(color: Colors.white70, fontSize: 14),
                       ),
-                      child: Row(
-                        children: [
-                          if (_selectedCountry != null)
-                            Text(
-                              "+$_dialCode",
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 16,
+                      const SizedBox(height: 8),
+
+                      Container(
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF23262C),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color:
+                                _errorMessage != null
+                                    ? Colors.redAccent
+                                    : Colors.transparent,
+                            width: 1,
+                          ),
+                        ),
+                        child: Column(
+                          children: [
+                            // Country Selector
+                            ListTile(
+                              onTap: _pickCountry,
+                              title: Text(
+                                _selectedCountry == null
+                                    ? "Select Country"
+                                    : "${_selectedCountry!.flag} ${_selectedCountry!.name}",
+                                style: TextStyle(
+                                  color:
+                                      _selectedCountry == null
+                                          ? Colors.white38
+                                          : Colors.white,
+                                ),
+                              ),
+                              trailing: const Icon(
+                                Icons.chevron_right,
+                                color: Colors.white54,
                               ),
                             ),
 
-                          if (_selectedCountry != null)
-                            const SizedBox(width: 10),
+                            const Divider(color: Colors.white12, height: 1),
 
-                          Expanded(
-                            child: TextField(
-                              controller: _phoneCtrl,
-                              keyboardType: TextInputType.number,
-                              inputFormatters: [
-                                FilteringTextInputFormatter.digitsOnly,
-                              ],
-                              style: const TextStyle(color: Colors.white),
-                              decoration: const InputDecoration(
-                                hintText: "Phone number",
-                                hintStyle: TextStyle(color: Colors.white38),
-                                border: InputBorder.none,
+                            // Phone Row
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 12,
                               ),
-                              onChanged: (_) => setState(() {}),
+                              child: Row(
+                                children: [
+                                  if (_selectedCountry != null)
+                                    Text(
+                                      "+$_dialCode",
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 16,
+                                      ),
+                                    ),
+                                  if (_selectedCountry != null)
+                                    const SizedBox(width: 12),
+                                  if (_selectedCountry != null)
+                                    const SizedBox(
+                                      height: 30,
+                                      child: VerticalDivider(
+                                        color: Colors.white24,
+                                        width: 1,
+                                      ),
+                                    ),
+                                  if (_selectedCountry != null)
+                                    const SizedBox(width: 12),
+                                  Expanded(
+                                    child: TextField(
+                                      controller: _phoneController,
+                                      keyboardType: TextInputType.number,
+                                      inputFormatters: [
+                                        FilteringTextInputFormatter.digitsOnly,
+                                      ],
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 16,
+                                      ),
+                                      decoration: const InputDecoration(
+                                        hintText: "Phone number",
+                                        hintStyle: TextStyle(
+                                          color: Colors.white38,
+                                        ),
+                                        border: InputBorder.none,
+                                      ),
+                                      onChanged: (_) {
+                                        setState(() {
+                                          _errorMessage = null;
+                                        });
+                                      },
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      if (_errorMessage != null) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          _errorMessage!,
+                          style: const TextStyle(
+                            color: Colors.redAccent,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+
+                      const SizedBox(height: 16),
+
+                      // Hint about stored secret
+                      const Text(
+                        "We'll automatically use your stored credentials to sign you in securely.",
+                        style: TextStyle(color: Colors.white38, fontSize: 12),
+                      ),
+
+                      const SizedBox(height: 30),
+
+                      // Sign In Button
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed:
+                              _isValid && !_isLoading
+                                  ? _signInWithStoredSecret
+                                  : null,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF4DA3FF),
+                            disabledBackgroundColor: const Color(0xFF23262C),
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
                             ),
                           ),
+                          child:
+                              _isLoading
+                                  ? const SizedBox(
+                                    height: 22,
+                                    width: 22,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                  : const Text(
+                                    "Sign In",
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 16),
+
+                      // Alternative option
+                      Center(
+                        child: TextButton(
+                          onPressed:
+                              _isValid && !_isLoading
+                                  ? _sendOtpAndVerify
+                                  : null,
+                          child: Text(
+                            "Verify with OTP instead",
+                            style: TextStyle(
+                              color:
+                                  _isValid
+                                      ? const Color(0xFF4DA3FF)
+                                      : Colors.white38,
+                            ),
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 20),
+
+                      // Divider
+                      Row(
+                        children: [
+                          Expanded(child: Divider(color: Colors.white24)),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            child: Text(
+                              "New here?",
+                              style: TextStyle(color: Colors.white38),
+                            ),
+                          ),
+                          Expanded(child: Divider(color: Colors.white24)),
                         ],
                       ),
-                    ),
-                  ],
-                ),
-              ),
 
-              const SizedBox(height: 16),
+                      const SizedBox(height: 20),
 
-              /// PHONE LOGIN BUTTON
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: _phoneValid ? _loginWithPhone : null,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor:
-                        _phoneValid
-                            ? const Color(0xFF4DA3FF)
-                            : const Color(0xFF23262C),
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                  ),
-                  child: const Text(
-                    "Continue",
-                    style: TextStyle(color: Colors.white),
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 20),
-
-              /// TERMS
-              Wrap(
-                children: [
-                  const Text(
-                    "By signing in you agree to ",
-                    style: TextStyle(color: Colors.white70),
-                  ),
-                  GestureDetector(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const TermsPrivacyPage(),
+                      // Register option
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton(
+                          onPressed: () {
+                            Navigator.pushReplacement(
+                              context,
+                              MaterialPageRoute(
+                                builder:
+                                    (_) => const PhoneAuthPage(
+                                      isSignInFlow: false,
+                                    ),
+                              ),
+                            );
+                          },
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.white,
+                            side: const BorderSide(color: Color(0xFF4DA3FF)),
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                          ),
+                          child: const Text(
+                            "Create New Account",
+                            style: TextStyle(fontSize: 16),
+                          ),
                         ),
-                      );
-                    },
-                    child: const Text(
-                      "Wrytte’s Terms and Conditions and Privacy Policy",
-                      style: TextStyle(color: Color(0xFF4DA3FF)),
-                    ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-            ],
-          ),
-        ),
+                ),
       ),
     );
   }

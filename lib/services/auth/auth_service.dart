@@ -13,8 +13,9 @@ class AuthService {
   static const _userIdKey = "user_id";
   static const _usernameKey = "username";
   static const _secretKey = "secret";
+  static const _phoneKey = "phone";
 
-  // EMAIL REGISTRATION
+  // ───────────────── EMAIL REGISTRATION ─────────────────
 
   Future<void> sendEmailCode(String email) async {
     await ApiService.post(
@@ -44,13 +45,13 @@ class AuthService {
     final user = AuthUser.fromJson(result);
 
     if (login) {
-      await _persistAuth(user);
+      await _persistAuth(user, phone: phone);
     }
 
     return user;
   }
 
-  // REAL PHONE REGISTRATION
+  // ───────────────── PHONE REGISTRATION ─────────────────
 
   Future<void> sendSmsCode(String phone) async {
     await ApiService.post("/auth/register/sendsmscode", body: {"phone": phone});
@@ -75,82 +76,91 @@ class AuthService {
     final user = AuthUser.fromJson(result);
 
     if (login) {
-      await _persistAuth(user);
+      await _persistAuth(user, phone: phone);
     }
 
     return user;
   }
 
-  // LOGIN
+  // ───────────────── LOGIN ─────────────────
 
   Future<AuthUser> login({
-    required String phone,
     required String secret,
     String? userid,
+    String? phone,
     String? username,
   }) async {
-    final result = await ApiService.post(
-      "/auth/login",
-      body: {
-        "phone": phone,
-        "secret": secret,
-        if (userid != null) "userid": userid,
-        if (username != null) "username": username,
-      },
-    );
+    final body = <String, dynamic>{
+      "secret": secret,
+      if (userid != null && userid.isNotEmpty) "userid": userid,
+      if (phone != null && phone.isNotEmpty) "phone": phone,
+      if (username != null && username.isNotEmpty) "username": username,
+    };
+
+    final result = await ApiService.post("/auth/login", body: body);
 
     final user = AuthUser.fromJson(result);
 
-    await _persistAuth(user);
+    await _persistAuth(user, phone: phone);
 
     return user;
   }
 
-  // NEW WRYTTE PRODUCTION AUTH FLOW
+  // ───────────────── SMART AUTH ─────────────────
+  // Automatically decides whether to login or register
+
   Future<AuthUser> authenticatePhone({
     required String phone,
     required String code,
-    required String secret,
     String? username,
   }) async {
-    try {
-      // Trying login first
-      final user = await login(
-        phone: phone,
-        secret: secret,
-        username: username,
-      );
+    final savedUser = await getCurrentUser();
 
-      return user;
-    } catch (_) {
-      // If login fails - register user
-      final user = await registerRealPhone(
-        phone: phone,
-        code: code,
-        username: username,
-        login: true,
-      );
-
-      return user;
+    if (savedUser != null &&
+        savedUser.secret.isNotEmpty &&
+        savedUser.userId.isNotEmpty) {
+      try {
+        return await login(
+          secret: savedUser.secret,
+          userid: savedUser.userId,
+          phone: phone,
+          username: savedUser.username.isNotEmpty ? savedUser.username : null,
+        );
+      } catch (_) {
+        // Stored credentials invalid → register again
+      }
     }
+
+    return await registerRealPhone(
+      phone: phone,
+      code: code,
+      username: username,
+      login: true,
+    );
   }
 
-  // PERSIST AUTH
+  // ───────────────── SAVE AUTH DATA ─────────────────
 
-  Future<void> _persistAuth(AuthUser user) async {
+  Future<void> _persistAuth(AuthUser user, {String? phone}) async {
     await _storage.write(key: _tokenKey, value: user.token);
 
-    await _storage.write(
-      key: _expiryKey,
-      value: user.expiresAt?.toUtc().toIso8601String(),
-    );
+    if (user.expiresAt != null) {
+      await _storage.write(
+        key: _expiryKey,
+        value: user.expiresAt!.toUtc().toIso8601String(),
+      );
+    }
 
     await _storage.write(key: _userIdKey, value: user.userId);
     await _storage.write(key: _usernameKey, value: user.username);
     await _storage.write(key: _secretKey, value: user.secret);
+
+    if (phone != null && phone.isNotEmpty) {
+      await _storage.write(key: _phoneKey, value: phone);
+    }
   }
 
-  // LOAD CURRENT USER
+  // ───────────────── LOAD CURRENT USER ─────────────────
 
   Future<AuthUser?> getCurrentUser() async {
     final token = await _storage.read(key: _tokenKey);
@@ -170,6 +180,12 @@ class AuthService {
     );
   }
 
+  // ───────────────── HELPERS ─────────────────
+
+  Future<String?> getSavedPhone() async {
+    return await _storage.read(key: _phoneKey);
+  }
+
   Future<String?> getCurrentUserId() async {
     return await _storage.read(key: _userIdKey);
   }
@@ -182,13 +198,12 @@ class AuthService {
     final user = await getCurrentUser();
 
     if (user == null) return false;
-
     if (user.isExpired) return false;
 
     return user.isAuthenticated;
   }
 
-  // LOGOUT
+  // ───────────────── LOGOUT ─────────────────
 
   Future<void> logout() async {
     await _storage.deleteAll();

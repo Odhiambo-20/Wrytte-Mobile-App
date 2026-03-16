@@ -14,36 +14,34 @@ class ApiService {
     Map<String, dynamic>? queryParameters,
     String? token,
   }) async {
-    return _retry(() async {
-      final uri = Uri.parse(
-        "$baseUrl$path",
-      ).replace(queryParameters: queryParameters);
+    final uri = Uri.parse(
+      "$baseUrl$path",
+    ).replace(queryParameters: queryParameters);
 
-      final headers = {
-        "Content-Type": "application/x-www-form-urlencoded",
-        if (token != null) "Authorization": "Bearer $token",
-      };
+    final headers = {
+      "Content-Type": "application/x-www-form-urlencoded",
+      if (token != null) "Authorization": "Bearer $token",
+    };
 
-      debugPrint("➡️ POST $uri");
-      debugPrint("📦 BODY: $body");
+    debugPrint("➡️ POST $uri");
+    debugPrint("📦 BODY: $body");
 
-      final response = await http
-          .post(
-            uri,
-            headers: headers,
-            body: body?.map((k, v) => MapEntry(k, v?.toString() ?? "")),
-          )
-          .timeout(const Duration(seconds: 20));
+    final response = await http
+        .post(
+          uri,
+          headers: headers,
+          body: body?.map((k, v) => MapEntry(k, v?.toString() ?? "")),
+        )
+        .timeout(const Duration(seconds: 20));
 
-      debugPrint("⬅️ STATUS: ${response.statusCode}");
-      debugPrint("⬅️ RESPONSE: ${response.body}");
+    debugPrint("⬅️ STATUS: ${response.statusCode}");
+    debugPrint("⬅️ RESPONSE: ${response.body}");
 
-      if (response.statusCode >= 200 && response.statusCode < 300) {
-        return _safeDecode(response.body);
-      }
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return _safeDecode(response.body);
+    }
 
-      throw ApiException(response.statusCode, response.body);
-    });
+    throw ApiException(response.statusCode, response.body);
   }
 
   // POST (multipart/form-data)
@@ -53,34 +51,32 @@ class ApiService {
     Map<String, String> fields, {
     String? token,
   }) async {
-    return _retry(() async {
-      final uri = Uri.parse("$baseUrl$path");
+    final uri = Uri.parse("$baseUrl$path");
 
-      final request = http.MultipartRequest("POST", uri);
-      request.fields.addAll(fields);
+    final request = http.MultipartRequest("POST", uri);
+    request.fields.addAll(fields);
 
-      if (token != null) {
-        request.headers["Authorization"] = "Bearer $token";
-      }
+    if (token != null) {
+      request.headers["Authorization"] = "Bearer $token";
+    }
 
-      debugPrint("➡️ POST MULTIPART $uri");
-      debugPrint("📦 FIELDS: $fields");
+    debugPrint("➡️ POST MULTIPART $uri");
+    debugPrint("📦 FIELDS: $fields");
 
-      final streamedResponse = await request.send().timeout(
-        const Duration(seconds: 20),
-      );
+    final streamedResponse = await request.send().timeout(
+      const Duration(seconds: 20),
+    );
 
-      final response = await http.Response.fromStream(streamedResponse);
+    final response = await http.Response.fromStream(streamedResponse);
 
-      debugPrint("⬅️ STATUS: ${response.statusCode}");
-      debugPrint("⬅️ RESPONSE: ${response.body}");
+    debugPrint("⬅️ STATUS: ${response.statusCode}");
+    debugPrint("⬅️ RESPONSE: ${response.body}");
 
-      if (response.statusCode >= 200 && response.statusCode < 300) {
-        return _safeDecode(response.body);
-      }
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return _safeDecode(response.body);
+    }
 
-      throw ApiException(response.statusCode, response.body);
-    });
+    throw ApiException(response.statusCode, response.body);
   }
 
   // GET
@@ -90,53 +86,49 @@ class ApiService {
     String? token,
     Map<String, dynamic>? queryParameters,
   }) async {
-    return _retry(() async {
-      final uri = Uri.parse(
-        "$baseUrl$path",
-      ).replace(queryParameters: queryParameters);
+    final uri = Uri.parse("$baseUrl$path").replace(
+      queryParameters: queryParameters?.map(
+        (k, v) => MapEntry(k, v?.toString() ?? ""),
+      ),
+    );
 
-      final headers = {
-        "Content-Type": "application/x-www-form-urlencoded",
-        if (token != null) "Authorization": "Bearer $token",
-      };
+    final headers = {
+      "Content-Type": "application/x-www-form-urlencoded",
+      if (token != null) "Authorization": "Bearer $token",
+    };
 
-      debugPrint("➡️ GET $uri");
+    debugPrint("➡️ GET $uri");
 
-      final response = await http
-          .get(uri, headers: headers)
-          .timeout(const Duration(seconds: 20));
+    final response = await http
+        .get(uri, headers: headers)
+        .timeout(const Duration(seconds: 20));
 
-      debugPrint("⬅️ STATUS: ${response.statusCode}");
-      debugPrint("⬅️ RESPONSE: ${response.body}");
+    debugPrint("⬅️ STATUS: ${response.statusCode}");
+    debugPrint("⬅️ RESPONSE: ${response.body}");
 
-      if (response.statusCode >= 200 && response.statusCode < 300) {
-        return _safeDecode(response.body);
-      }
-
-      throw ApiException(response.statusCode, response.body);
-    });
-  }
-
-  // RETRY LOGIC
-
-  static Future<dynamic> _retry(Future<dynamic> Function() request) async {
-    try {
-      return await request();
-    } catch (e) {
-      debugPrint("⚠️ Request failed. Retrying in 2 seconds...");
-      await Future.delayed(const Duration(seconds: 2));
-      return await request();
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return _safeDecode(response.body);
     }
+
+    throw ApiException(response.statusCode, response.body);
   }
 
-  // SAFE JSON DECODER (returns dynamic: List or Map)
+  // SAFE JSON DECODER
 
   static dynamic _safeDecode(String body) {
     if (body.isEmpty) return null;
 
     try {
-      return jsonDecode(body);
-    } catch (_) {
+      final decoded = jsonDecode(body);
+
+      if (decoded is int || decoded is bool || decoded is String) {
+        debugPrint("⚠️ Primitive JSON received: $decoded");
+        return {"value": decoded};
+      }
+
+      return decoded;
+    } catch (e) {
+      debugPrint("⚠️ JSON decode error: $e");
       debugPrint("⚠️ Non-JSON response received, treating as success");
       return null;
     }

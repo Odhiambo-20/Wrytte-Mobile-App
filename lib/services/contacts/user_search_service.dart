@@ -4,29 +4,51 @@ import 'package:http/http.dart' as http;
 class UserSearchService {
   static const String baseUrl = "https://wryttedev.azurewebsites.net";
 
-  Future<List<Map<String, dynamic>>> searchUsersByPhones(
-    List<String> phoneNumbers,
-    String token,
-  ) async {
+  /// Send phone numbers to backend and get matched users
+  Future<Map<String, String>> searchUsersByPhones({
+    List<String>? phoneNumbersA,
+    String? phoneNumbersC,
+    required String token,
+  }) async {
     final uri = Uri.parse("$baseUrl/api/users/search");
 
-    final request = http.MultipartRequest("POST", uri);
+    String? phonesToSend;
 
-    /// send phones as array
-    for (final phone in phoneNumbers) {
-      request.fields.addAll({"phoneNumbers": phone});
+    if (phoneNumbersC != null && phoneNumbersC.isNotEmpty) {
+      phonesToSend = phoneNumbersC;
+    } else if (phoneNumbersA != null && phoneNumbersA.isNotEmpty) {
+      phonesToSend = phoneNumbersA.join('|');
+    } else {
+      return {};
     }
 
-    request.headers['Authorization'] = 'Bearer $token';
+    try {
+      final response = await http.post(
+        uri,
+        headers: {
+          "Authorization": "Bearer $token",
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: {"phoneNumbersC": phonesToSend},
+      );
 
-    final response = await request.send();
+      if (response.statusCode != 200) {
+        throw Exception("Search failed: ${response.body}");
+      }
 
-    final body = await response.stream.bytesToString();
+      if (response.body.isEmpty) {
+        return {};
+      }
 
-    if (response.statusCode == 200) {
-      return List<Map<String, dynamic>>.from(jsonDecode(body));
-    } else {
-      throw Exception("Search failed: $body");
+      final decoded = jsonDecode(response.body);
+
+      final Map<String, String> result = Map<String, String>.from(
+        decoded as Map,
+      );
+
+      return result;
+    } catch (e) {
+      throw Exception("User search error: $e");
     }
   }
 }

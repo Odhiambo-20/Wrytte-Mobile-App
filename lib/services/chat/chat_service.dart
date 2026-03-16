@@ -43,6 +43,9 @@ class ChatService {
   bool _initialized = false;
   bool _isConnected = false;
 
+  /// Prevent overlapping API calls
+  bool _isFetchingMessages = false;
+
   // CLIENT SIDE CACHE
 
   final Map<String, ChatConversation> _conversationsMap = {};
@@ -60,12 +63,14 @@ class ChatService {
 
     try {
       _currentUser = await _authService.getCurrentUser();
+
       if (_currentUser == null) {
         _errorController.add("User not authenticated");
         return;
       }
 
       final token = _currentUser!.token;
+
       if (token == null || token.isEmpty) {
         _errorController.add("Missing auth token");
         return;
@@ -86,8 +91,10 @@ class ChatService {
 
       _isConnected = true;
       _initialized = true;
+
       _connectionController.add(true);
-      debugPrint(" ChatService connected");
+
+      debugPrint("ChatService connected");
 
       _startAutoSync();
     } catch (e) {
@@ -101,11 +108,15 @@ class ChatService {
 
   void _startAutoSync() {
     _autoSyncTimer?.cancel();
+
     _autoSyncTimer = Timer.periodic(_syncInterval, (_) async {
       try {
         if (!_isConnected || _currentUser == null) return;
 
+        if (_isFetchingMessages) return;
+
         String? lastMessageId;
+
         final allMessages = _messagesCache.values.expand((e) => e).toList();
 
         if (allMessages.isNotEmpty) {
@@ -125,17 +136,21 @@ class ChatService {
   void _handleSocketMessage(Map<String, dynamic> raw) {
     try {
       final socketMessage = SocketMessage.fromMap(raw);
+
       switch (socketMessage.type) {
         case SocketMessageType.message:
           _handleIncomingChatMessage(socketMessage);
           break;
+
         case SocketMessageType.typing:
         case SocketMessageType.presence:
         case SocketMessageType.system:
           break;
+
         case SocketMessageType.error:
           _errorController.add(socketMessage.message ?? "Server error");
           break;
+
         default:
           debugPrint("Unknown socket message");
       }
@@ -148,6 +163,9 @@ class ChatService {
 
   void _handleIncomingChatMessage(SocketMessage socketMessage) {
     final payload = socketMessage.payload;
+
+    if (payload is! Map) return;
+
     final senderId = payload["from"]?.toString() ?? "";
     final receiverId = payload["to"]?.toString() ?? "";
 
@@ -164,7 +182,7 @@ class ChatService {
       content: payload["msg"]?.toString() ?? "",
       timestamp:
           payload["ts"] != null
-              ? DateTime.tryParse(payload["ts"]) ?? DateTime.now()
+              ? DateTime.tryParse(payload["ts"].toString()) ?? DateTime.now()
               : DateTime.now(),
       status: MessageStatus.sent,
       attachmentUrl: payload["attachmentUrl"]?.toString(),
@@ -172,6 +190,7 @@ class ChatService {
     );
 
     _messageController.add(chatMessage);
+
     _updateConversations(chatMessage);
   }
 
@@ -179,10 +198,12 @@ class ChatService {
 
   void _updateConversations(ChatMessage message) {
     final convId = message.conversationId;
+
     final currentUserId = _currentUser?.userId ?? "";
 
     if (_conversationsMap.containsKey(convId)) {
       final existing = _conversationsMap[convId]!;
+
       _conversationsMap[convId] = existing.updateWithMessage(
         message,
         currentUserId,
@@ -195,6 +216,7 @@ class ChatService {
     }
 
     _messagesCache.putIfAbsent(convId, () => []);
+
     if (!_messagesCache[convId]!.any((m) => m.id == message.id)) {
       _messagesCache[convId]!.add(message);
     }
@@ -232,64 +254,107 @@ class ChatService {
     DateTime? time,
     int maxCount = 100,
   }) async {
+    if (_isFetchingMessages) {
+      debugPrint("Fetch already running, skipping");
+      return [];
+    }
+
+    _isFetchingMessages = true;
+
     try {
       final response = await ApiService.post(
         "/api/Message/GetMessages",
-        queryParameters: {"maxCount": maxCount},
+        queryParameters: {
+          "maxCount": maxCount.toString(),
+        }, // ✅ convert to String
         body: {"time": time?.toUtc().toIso8601String(), "messageId": messageId},
       );
 
-      //  SAFE RESPONSE HANDLING
-      List<dynamic> rawMessages = [];
-      if (response is List) {
-        rawMessages = response;
-      } else if (response is Map && response["messages"] is List) {
-        rawMessages = response["messages"];
-      } else {
+      debugPrint("API GetMessages response: $response");
+
+      if (response == null) {
+        debugPrint("Response is null");
+        return [];
+      }
+
+      if (response is! Map) {
+        debugPrint("Unexpected response type: ${response.runtimeType}");
+        return [];
+      }
+
+      final dynamic rawMessages = response["messages"];
+
+      if (rawMessages == null) {
+        debugPrint("API returned null messages");
+        return [];
+      }
+
+      if (rawMessages is! List) {
         debugPrint(
-          " Unexpected API response type: ${response.runtimeType}. Response: $response",
+          "API 'messages' field is not a list: ${rawMessages.runtimeType}",
         );
-        rawMessages = [];
+        return [];
       }
 
-      // Only iterate if iterable
-      final messages = <ChatMessage>[];
-      for (var msg in rawMessages) {
-        if (msg is Map<String, dynamic>) {
-          final sender = msg["from"]?.toString() ?? "";
-          final receiver = msg["to"]?.toString() ?? "";
-          final convId =
-              (sender.compareTo(receiver) < 0)
-                  ? "$sender-$receiver"
-                  : "$receiver-$sender";
+      final List<ChatMessage> messages = [];
 
-          messages.add(
-            ChatMessage(
-              id: msg["msgId"]?.toString() ?? "",
-              conversationId: convId,
-              senderId: sender,
-              receiverId: receiver,
-              content: msg["msg"]?.toString() ?? "",
-              timestamp:
-                  msg["ts"] != null
-                      ? DateTime.tryParse(msg["ts"]) ?? DateTime.now()
-                      : DateTime.now(),
-              status: MessageStatus.sent,
-              attachmentUrl: msg["attachmentUrl"]?.toString(),
-              attachmentType: msg["attachmentType"]?.toString(),
-            ),
-          );
+      for (final item in rawMessages) {
+        if (item == null || item is! Map) {
+          debugPrint("Skipping invalid message item: $item");
+          continue;
         }
+
+        final msg = Map<String, dynamic>.from(item);
+
+        final sender = msg["from"]?.toString() ?? "";
+        final receiver = msg["to"]?.toString() ?? "";
+
+        if (sender.isEmpty || receiver.isEmpty) {
+          debugPrint("Skipping message with missing sender/receiver");
+          continue;
+        }
+
+        final convId =
+            (sender.compareTo(receiver) < 0)
+                ? "$sender-$receiver"
+                : "$receiver-$sender";
+
+        DateTime timestamp = DateTime.now();
+
+        if (msg["ts"] != null) {
+          final parsed = DateTime.tryParse(msg["ts"].toString());
+          if (parsed != null) timestamp = parsed;
+        }
+
+        final message = ChatMessage(
+          id: msg["msgId"]?.toString() ?? "",
+          conversationId: convId,
+          senderId: sender,
+          receiverId: receiver,
+          content: msg["msg"]?.toString() ?? "",
+          timestamp: timestamp,
+          status: MessageStatus.sent,
+          attachmentUrl: msg["attachmentUrl"]?.toString(),
+          attachmentType: msg["attachmentType"]?.toString(),
+        );
+
+        messages.add(message);
       }
 
-      for (var msg in messages) {
+      // Update conversations
+      for (final msg in messages) {
         _updateConversations(msg);
       }
 
+      debugPrint("Fetched ${messages.length} messages");
+
       return messages;
-    } catch (e) {
+    } catch (e, stack) {
       debugPrint("Fetch messages error: $e");
+      debugPrint(stack.toString());
       return [];
+    } finally {
+      _isFetchingMessages = false;
     }
   }
 
@@ -299,34 +364,6 @@ class ChatService {
     final messages = _messagesCache[conversationId] ?? [];
     messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
     return messages;
-  }
-
-  // FETCH RECENT CONVERSATIONS
-
-  Future<void> fetchRecentConversations({int limit = 20}) async {
-    try {
-      final allMessages = await fetchMessages();
-      final recentMap = <String, ChatMessage>{};
-
-      for (var msg in allMessages) {
-        final convId = msg.conversationId;
-        if (!recentMap.containsKey(convId) ||
-            msg.timestamp.isAfter(recentMap[convId]!.timestamp)) {
-          recentMap[convId] = msg;
-        }
-      }
-
-      final sorted =
-          recentMap.values.toList()
-            ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
-
-      final limited = sorted.length > limit ? sorted.take(limit) : sorted;
-      for (var msg in limited) {
-        _updateConversations(msg);
-      }
-    } catch (e) {
-      debugPrint("Fetch recent conversations failed $e");
-    }
   }
 
   // DISCONNECT
@@ -340,8 +377,10 @@ class ChatService {
 
   void _handleDisconnect() {
     if (!_isConnected) return;
+
     _isConnected = false;
     _initialized = false;
+
     _connectionController.add(false);
   }
 
@@ -349,6 +388,7 @@ class ChatService {
 
   void dispose() {
     disconnect();
+
     _messageController.close();
     _errorController.close();
     _connectionController.close();

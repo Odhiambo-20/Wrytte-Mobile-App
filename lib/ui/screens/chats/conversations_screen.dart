@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:wrytte/models/chat_models/chat_conversation.dart';
 import 'package:wrytte/services/auth/auth_service.dart';
@@ -21,9 +22,14 @@ class ConversationsScreen extends StatefulWidget {
 
 class _ConversationsScreenState extends State<ConversationsScreen> {
   bool _isLoading = true;
+
   late final ChatService _chatService;
+
   List<ChatConversation> _conversations = [];
+
   String _currentUserId = "";
+
+  StreamSubscription<List<ChatConversation>>? _conversationSubscription;
 
   @override
   void initState() {
@@ -33,49 +39,61 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
   }
 
   Future<void> _initialize() async {
-    // 1️⃣ Get current user ID
-    _currentUserId = await AuthService.instance.getCurrentUserId() ?? "";
+    try {
+      // 1️⃣ Get current user ID
+      _currentUserId = await AuthService.instance.getCurrentUserId() ?? "";
 
-    // 2️⃣ Listen to conversation updates from ChatService
-    _chatService.conversationsStream.listen((conversations) {
-      final convs = conversations.cast<ChatConversation>();
+      // 2️⃣ Connect chat service (starts socket + autosync)
+      await _chatService.connect();
 
-      setState(() {
-        _conversations = convs;
-        _isLoading = false;
+      // 3️⃣ Listen for conversation updates
+      _conversationSubscription = _chatService.conversationsStream.listen((
+        conversations,
+      ) {
+        final convs = conversations.cast<ChatConversation>();
+
+        setState(() {
+          _conversations = convs;
+          _isLoading = false;
+        });
+
+        int unreadTotal = 0;
+        for (var conv in convs) {
+          unreadTotal += conv.unreadCount;
+        }
+
+        widget.onUnreadCountUpdated?.call(unreadTotal);
       });
 
-      int unreadTotal = 0;
-      for (var conv in convs) {
-        unreadTotal += conv.unreadCount;
-      }
+      // 4️⃣ Load initial messages (this builds conversations)
+      await _chatService.fetchMessages(maxCount: 20);
 
-      widget.onUnreadCountUpdated?.call(unreadTotal);
-    });
-
-    // 3️⃣ Load recent conversations
-    await _chatService.fetchRecentConversations();
-    setState(() {
-      _isLoading = false;
-    });
+      setState(() {
+        _isLoading = false;
+      });
+    } catch (e) {
+      debugPrint("Conversation init error $e");
+      setState(() {
+        _isLoading = false;
+      });
+    }
   }
 
   Widget _buildConversationItem(ChatConversation conversation) {
-    // Determine the other user in the conversation
     final otherUserId = conversation.participants.firstWhere(
       (id) => id != _currentUserId,
       orElse: () => "",
     );
 
     return ConversationTile(
-      name:
-          "User $otherUserId", // Replace with actual user name lookup if available
+      name: "User $otherUserId",
       lastMessage: conversation.lastMessage,
       time: conversation.lastMessageTime.toLocal().toString().split(' ')[1],
-      avatarUrl: null, // Replace with actual avatar if available
+      avatarUrl: null,
       unreadCount: conversation.unreadCount,
       onTap: () async {
         final chatState = ChatState(_chatService);
+
         await chatState.initialize();
 
         Navigator.push(
@@ -110,7 +128,9 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
         setState(() {
           _isLoading = true;
         });
-        await _chatService.fetchRecentConversations();
+
+        await _chatService.fetchMessages(maxCount: 20);
+
         setState(() {
           _isLoading = false;
         });
@@ -129,6 +149,12 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
     return const Center(
       child: CircularProgressIndicator(color: Color(0xFF4DA3FF)),
     );
+  }
+
+  @override
+  void dispose() {
+    _conversationSubscription?.cancel();
+    super.dispose();
   }
 
   @override

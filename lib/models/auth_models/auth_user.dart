@@ -2,82 +2,48 @@ class AuthUser {
   final String userId;
   final String username;
   final String secret;
-  final String? token;
+  final String token;
+  final String? phone;
   final DateTime? expiresAt;
 
-  const AuthUser({
+  AuthUser({
     required this.userId,
     required this.username,
     required this.secret,
-    this.token,
+    required this.token,
+    this.phone,
     this.expiresAt,
   });
 
-  // EMPTY USER
+  bool get isAuthenticated => token.isNotEmpty;
 
-  const AuthUser.empty()
-    : userId = '',
-      username = '',
-      secret = '',
-      token = null,
-      expiresAt = null;
-
-  // FROM JSON
+  bool get isExpired =>
+      expiresAt != null && expiresAt!.isBefore(DateTime.now());
 
   factory AuthUser.fromJson(Map<String, dynamic> json) {
     return AuthUser(
-      userId: json['userid']?.toString() ?? '',
-      username: json['username']?.toString() ?? '',
-      secret: json['secret']?.toString() ?? '',
-      token: json['token']?.toString(),
+      userId: json['userid'] ?? json['userId'] ?? '',
+      username: json['username'] ?? '',
+      secret: json['secret'] ?? '',
+      token: json['token'] ?? '',
+      phone: json['phone'],
       expiresAt:
-          json['expiration'] != null
-              ? DateTime.tryParse(json['expiration'].toString())
+          json['expires'] != null
+              ? DateTime.tryParse(json['expires'])
+              : json['expiresAt'] != null
+              ? DateTime.tryParse(json['expiresAt'])
               : null,
     );
   }
 
-  // TO JSON
-
   Map<String, dynamic> toJson() {
     return {
-      "userid": userId,
-      "username": username,
-      "secret": secret,
-      "token": token,
-      if (expiresAt != null) "expiration": expiresAt!.toUtc().toIso8601String(),
+      'userid': userId,
+      'username': username,
+      'secret': secret,
+      'token': token,
+      'phone': phone,
+      'expires': expiresAt?.toIso8601String(),
     };
-  }
-
-  // COPY WITH
-
-  AuthUser copyWith({
-    String? userId,
-    String? username,
-    String? secret,
-    String? token,
-    DateTime? expiresAt,
-  }) {
-    return AuthUser(
-      userId: userId ?? this.userId,
-      username: username ?? this.username,
-      secret: secret ?? this.secret,
-      token: token ?? this.token,
-      expiresAt: expiresAt ?? this.expiresAt,
-    );
-  }
-
-  // AUTH HELPERS
-
-  bool get isAuthenticated => token != null && token!.isNotEmpty;
-
-  bool get isExpired {
-    if (expiresAt == null) return false;
-    return DateTime.now().isAfter(expiresAt!);
-  }
-
-  @override
-  String toString() {
-    return "AuthUser(userId: $userId, username: $username, token: $token, expiresAt: $expiresAt)";
   }
 }
