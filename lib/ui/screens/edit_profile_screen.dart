@@ -1,11 +1,15 @@
 import 'dart:io';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:wrytte/ui/auth/phone_auth_page.dart';
+import 'package:wrytte/components/user_avatar.dart';
+import 'package:wrytte/models/user_models/user_profile_service.dart';
+import 'package:wrytte/services/auth/auth_service.dart';
+import 'package:wrytte/services/chat/chat_local_db.dart';
+import 'package:wrytte/services/user/user_profile_service.dart';
+import 'package:wrytte/ui/auth/auth_entry_screen.dart';
 
 class EditProfileScreen extends StatefulWidget {
   const EditProfileScreen({super.key});
@@ -15,752 +19,597 @@ class EditProfileScreen extends StatefulWidget {
 }
 
 class _EditProfileScreenState extends State<EditProfileScreen> {
-  final User? _currentUser = FirebaseAuth.instance.currentUser;
   final _formKey = GlobalKey<FormState>();
 
-  // Controllers
-  final TextEditingController _nameController = TextEditingController();
-  final TextEditingController _usernameController = TextEditingController();
+  final TextEditingController _firstNameController = TextEditingController();
+  final TextEditingController _lastNameController = TextEditingController();
   final TextEditingController _bioController = TextEditingController();
+  final TextEditingController _linkController = TextEditingController();
 
   bool _isLoading = false;
-  bool _hasUnsavedChanges = false;
-  Map<String, dynamic>? _userData;
-  String? _profileImageUrl; // local cached URL
+  bool _isSaving = false;
   File? _pickedImageFile;
   final ImagePicker _picker = ImagePicker();
 
-  // Links storage
-  final List<String> _links = [];
+  UserProfile? _profile;
+
+  // Tracks the current profile image URL shown in the avatar
+  String? _currentImageUrl;
 
   @override
   void initState() {
     super.initState();
-    _loadUserData();
-
-    // Add listeners to detect changes
-    _nameController.addListener(_checkForChanges);
-    _usernameController.addListener(_checkForChanges);
-    _bioController.addListener(_checkForChanges);
+    _loadProfile();
   }
 
-  void _checkForChanges() {
-    final nameChanged = _nameController.text != (_userData?['name'] ?? '');
-    final usernameChanged =
-        _usernameController.text != (_userData?['username'] ?? '');
-    final bioChanged = _bioController.text != (_userData?['bio'] ?? '');
-
-    final hasChanges =
-        nameChanged ||
-        usernameChanged ||
-        bioChanged ||
-        _pickedImageFile != null;
-
-    if (hasChanges != _hasUnsavedChanges) {
-      setState(() {
-        _hasUnsavedChanges = hasChanges;
-      });
-    }
-  }
-
-  Future<void> _loadUserData() async {
-    if (_currentUser == null) return;
+  Future<void> _loadProfile() async {
     setState(() => _isLoading = true);
 
-    try {
-      final doc =
-          await FirebaseFirestore.instance
-              .collection('users')
-              .doc(_currentUser.uid)
-              .get();
+    final profile = await UserProfileService.instance.getCurrentUserProfile();
 
-      if (doc.exists) {
-        _userData = doc.data() ?? {};
-        _nameController.text = (_userData?['name'] ?? '') as String;
-        _usernameController.text = (_userData?['username'] ?? '') as String;
-        _bioController.text = (_userData?['bio'] ?? '') as String;
+    if (!mounted) return;
 
-        // load links if present (expecting a List in Firestore)
-        final ls = _userData?['links'];
-        if (ls is List) {
-          _links.clear();
-          _links.addAll(ls.whereType<String>());
-        }
-
-        _profileImageUrl = (_userData?['profileImage'] ?? '') as String?;
-      }
-    } catch (e, st) {
-      debugPrint('Error loading profile data: $e\n$st');
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error loading profile: $e')));
-      }
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
+    if (profile != null) {
+      // Split name into first/last — name field in Firestore is a full name
+      final nameParts = profile.name.trim().split(RegExp(r'\s+'));
+      _firstNameController.text = nameParts.isNotEmpty ? nameParts[0] : '';
+      _lastNameController.text =
+          nameParts.length > 1 ? nameParts.sublist(1).join(' ') : '';
+      _bioController.text = profile.bio;
+      // Show first link in the link field for editing
+      _linkController.text = profile.links.isNotEmpty ? profile.links[0] : '';
+      _currentImageUrl = profile.hasProfileImage ? profile.profileImage : null;
     }
+
+    setState(() {
+      _profile = profile;
+      _isLoading = false;
+    });
   }
 
   Future<void> _pickImage(ImageSource source) async {
-    try {
-      final XFile? picked = await _picker.pickImage(
-        source: source,
-        maxWidth: 1200,
-        maxHeight: 1200,
-        imageQuality: 80,
-      );
-      if (picked == null) return;
-
-      setState(() {
-        _pickedImageFile = File(picked.path);
-        _hasUnsavedChanges = true;
-      });
-    } catch (e) {
-      debugPrint('Image pick error: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Failed to pick image')));
-      }
+    final picked = await _picker.pickImage(source: source, imageQuality: 85);
+    if (picked != null) {
+      setState(() => _pickedImageFile = File(picked.path));
     }
   }
 
-  Future<String?> _uploadProfileImage(File file) async {
-    if (_currentUser == null) return null;
-    final storageRef = FirebaseStorage.instance
-        .ref()
-        .child('user_profile_images')
-        .child('${_currentUser.uid}.jpg');
+  void _showImageOptions() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF23262C),
+      builder:
+          (_) => SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.photo, color: Colors.white),
+                  title: const Text(
+                    'Gallery',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _pickImage(ImageSource.gallery);
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.camera_alt, color: Colors.white),
+                  title: const Text(
+                    'Camera',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _pickImage(ImageSource.camera);
+                  },
+                ),
+              ],
+            ),
+          ),
+    );
+  }
 
+  // ── Upload image to Firebase Storage and return download URL ──────────────
+
+  Future<String?> _uploadProfileImage(File file) async {
     try {
-      final uploadTask = storageRef.putFile(file);
-      final snapshot = await uploadTask;
-      final url = await snapshot.ref.getDownloadURL();
-      return url;
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) return null;
+
+      final ref = FirebaseStorage.instance.ref().child(
+        'user_profile_images/$uid.jpg',
+      );
+
+      await ref.putFile(file);
+      return await ref.getDownloadURL();
     } catch (e) {
-      debugPrint('Upload error: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to upload profile image')),
-        );
-      }
       return null;
     }
   }
 
-  Future<bool> _isUsernameAvailable(String username) async {
-    if (username.trim().isEmpty) return false;
-    final query =
-        await FirebaseFirestore.instance
-            .collection('users')
-            .where('username', isEqualTo: username)
-            .limit(1)
-            .get();
+  // ── Save all changes to Firestore ─────────────────────────────────────────
 
-    if (query.docs.isEmpty) return true;
+  Future<void> _save() async {
+    if (_isSaving) return;
 
-    // If doc exists, allow it only if it's the current user
-    final doc = query.docs.first;
-    return doc.id == _currentUser?.uid;
-  }
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) {
+      _showSnack('Not authenticated. Please log in again.', isError: true);
+      return;
+    }
 
-  Future<void> _saveProfile() async {
-    if (_currentUser == null) return;
-    if (!_formKey.currentState!.validate()) return;
-
-    final newName = _nameController.text.trim();
-    final newUsername = _usernameController.text.trim();
-    final newBio = _bioController.text.trim();
-
-    setState(() => _isLoading = true);
+    setState(() => _isSaving = true);
 
     try {
-      // Check username uniqueness only if changed
-      if (newUsername != (_userData?['username'] ?? '')) {
-        final available = await _isUsernameAvailable(newUsername);
-        if (!available) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Username is already taken')),
-            );
-            setState(() => _isLoading = false);
-          }
+      String? newImageUrl = _currentImageUrl;
+
+      // Upload new image if one was picked
+      if (_pickedImageFile != null) {
+        newImageUrl = await _uploadProfileImage(_pickedImageFile!);
+        if (newImageUrl == null) {
+          _showSnack('Failed to upload photo. Try again.', isError: true);
+          setState(() => _isSaving = false);
           return;
         }
       }
 
-      // If a new image was picked, upload it first
-      String? imageUrl = _profileImageUrl;
-      if (_pickedImageFile != null) {
-        final uploadedUrl = await _uploadProfileImage(_pickedImageFile!);
-        if (uploadedUrl != null) imageUrl = uploadedUrl;
+      final firstName = _firstNameController.text.trim();
+      final lastName = _lastNameController.text.trim();
+      final fullName = [
+        firstName,
+        lastName,
+      ].where((s) => s.isNotEmpty).join(' ');
+      final bio = _bioController.text.trim();
+      final link = _linkController.text.trim();
+
+      // Build updated links list — keep existing links beyond index 0,
+      // replace index 0 with the edited link field
+      final existingLinks = List<String>.from(_profile?.links ?? []);
+      if (link.isNotEmpty) {
+        if (existingLinks.isEmpty) {
+          existingLinks.add(link);
+        } else {
+          existingLinks[0] = link;
+        }
+      } else {
+        // Link field was cleared — remove first link
+        if (existingLinks.isNotEmpty) existingLinks.removeAt(0);
       }
 
-      // Prepare update map
-      final updateData = <String, dynamic>{
-        'name': newName,
-        'username': newUsername,
-        'bio': newBio,
-        'links': _links,
+      final updates = <String, dynamic>{
+        'name': fullName,
+        'bio': bio,
+        'links': existingLinks,
         'updatedAt': FieldValue.serverTimestamp(),
+        if (newImageUrl != null) 'profileImage': newImageUrl,
       };
-
-      if (imageUrl != null && imageUrl.isNotEmpty) {
-        updateData['profileImage'] = imageUrl;
-      }
 
       await FirebaseFirestore.instance
           .collection('users')
-          .doc(_currentUser.uid)
-          .update(updateData);
+          .doc(uid)
+          .update(updates);
 
-      // reflect locally
-      _userData = {...?_userData, ...updateData};
-      _profileImageUrl = imageUrl;
-      _pickedImageFile = null;
-      _hasUnsavedChanges = false;
+      // Force refresh the in-memory cache
+      await UserProfileService.instance.getCurrentUserProfile(
+        forceRefresh: true,
+      );
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Profile updated successfully')),
-        );
-        Navigator.of(context).pop(); // pop back to profile
-      }
+      if (!mounted) return;
+
+      setState(() {
+        _currentImageUrl = newImageUrl;
+        _pickedImageFile = null;
+        _isSaving = false;
+      });
+
+      _showSnack('Profile updated successfully.');
     } catch (e) {
-      debugPrint('Save error: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error saving profile: $e')));
-      }
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (!mounted) return;
+      setState(() => _isSaving = false);
+      _showSnack('Failed to save changes. Try again.', isError: true);
     }
   }
 
-  Future<void> _confirmLogout() async {
-    final result = await showDialog<bool>(
-      context: context,
-      barrierDismissible: true,
-      builder:
-          (c) => AlertDialog(
-            title: const Text('Log Out'),
-            content: const Text('Are you sure you want to log out?'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(c).pop(false),
-                child: const Text('Cancel'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.of(c).pop(true),
-                style: TextButton.styleFrom(foregroundColor: Colors.red),
-                child: const Text('Log Out'),
-              ),
-            ],
-          ),
-    );
-
-    if (result == true) {
-      await _logout();
-    }
-  }
+  // ── Logout — Firebase + custom backend session ────────────────────────────
 
   Future<void> _logout() async {
-    setState(() => _isLoading = true);
-    try {
-      await FirebaseAuth.instance.signOut();
-      if (mounted) {
-        Navigator.pushAndRemoveUntil(
-          context,
-          MaterialPageRoute(builder: (_) => const PhoneAuthPage()),
-          (route) => false,
-        );
-      }
-    } catch (e) {
-      debugPrint('Logout error: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error logging out: $e')));
-      }
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
+    await AuthService.instance.logout();
+    UserProfileService.instance.clearCache();
+    await ChatLocalDb.instance.clearAll(); // ← wipe local chat on logout
+    if (mounted) {
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const AuthEntryScreen()),
+        (route) => false,
+      );
     }
   }
 
-  void _showImageSourceOptions() {
-    showModalBottomSheet<void>(
-      context: context,
-      builder: (c) {
-        return SafeArea(
-          child: Wrap(
-            children: [
-              ListTile(
-                leading: const Icon(Icons.photo_library),
-                title: const Text('Choose from gallery'),
-                onTap: () {
-                  Navigator.of(c).pop();
-                  _pickImage(ImageSource.gallery);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.camera_alt),
-                title: const Text('Take a photo'),
-                onTap: () {
-                  Navigator.of(c).pop();
-                  _pickImage(ImageSource.camera);
-                },
-              ),
-              if (_profileImageUrl != null || _pickedImageFile != null)
-                ListTile(
-                  leading: const Icon(Icons.delete_forever, color: Colors.red),
-                  title: const Text(
-                    'Remove photo',
-                    style: TextStyle(color: Colors.red),
-                  ),
-                  onTap: () {
-                    Navigator.of(c).pop();
-                    setState(() {
-                      _profileImageUrl = null;
-                      _pickedImageFile = null;
-                      _hasUnsavedChanges = true;
-                    });
-                  },
-                ),
-              ListTile(
-                leading: const Icon(Icons.close),
-                title: const Text('Cancel'),
-                onTap: () => Navigator.of(c).pop(),
-              ),
-            ],
-          ),
-        );
-      },
+  void _showSnack(String message, {bool isError = false}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor:
+            isError ? const Color(0xFFE05252) : const Color(0xFF4DA3FF),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      ),
     );
   }
 
-  Future<void> _showAddLinkDialog() async {
-    final TextEditingController linkController = TextEditingController();
-    final result = await showDialog<String?>(
-      context: context,
-      builder: (c) {
-        return AlertDialog(
-          title: const Text('Add Link'),
-          content: TextField(
-            controller: linkController,
-            decoration: const InputDecoration(hintText: 'https://example.com'),
-            keyboardType: TextInputType.url,
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(c).pop(null),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(c).pop(linkController.text.trim()),
-              child: const Text('Add'),
-            ),
-          ],
-        );
-      },
+  // ── Divider ───────────────────────────────────────────────────────────────
+
+  Widget _divider() {
+    return const Divider(
+      height: 1,
+      thickness: 0.4,
+      color: Color(0xFF3A3D44),
+      indent: 16,
+      endIndent: 0,
     );
-
-    if (result != null && result.isNotEmpty) {
-      setState(() {
-        _links.add(result);
-        _hasUnsavedChanges = true;
-      });
-    }
   }
 
-  void _removeLinkAt(int index) {
-    setState(() {
-      _links.removeAt(index);
-      _hasUnsavedChanges = true;
-    });
-  }
+  // ── Input row ─────────────────────────────────────────────────────────────
 
-  @override
-  void dispose() {
-    _nameController.dispose();
-    _usernameController.dispose();
-    _bioController.dispose();
-    super.dispose();
+  Widget _inputRow(
+    String hint,
+    TextEditingController controller, {
+    int maxLines = 1,
+  }) {
+    return TextFormField(
+      controller: controller,
+      maxLines: maxLines,
+      style: const TextStyle(
+        color: Colors.white,
+        fontSize: 16,
+        fontWeight: FontWeight.w400,
+      ),
+      decoration: InputDecoration(
+        hintText: hint,
+        hintStyle: const TextStyle(
+          color: Color(0xFF6B6E75),
+          fontSize: 16,
+          fontWeight: FontWeight.w400,
+        ),
+        border: InputBorder.none,
+        enabledBorder: InputBorder.none,
+        focusedBorder: InputBorder.none,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 16,
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     const bg = Color(0xFF08090B);
-    const card = Color(0xFF23262C);
+    const cardBg = Color(0xFF23262C);
     const accent = Color(0xFF4DA3FF);
+
+    // Determine what to show in the avatar:
+    // picked local file > current URL from Firestore > initials fallback
+    Widget avatarWidget;
+    if (_pickedImageFile != null) {
+      avatarWidget = GestureDetector(
+        onTap: _showImageOptions,
+        child: ClipOval(
+          child: Image.file(
+            _pickedImageFile!,
+            width: 100,
+            height: 100,
+            fit: BoxFit.cover,
+          ),
+        ),
+      );
+    } else {
+      avatarWidget = GestureDetector(
+        onTap: _showImageOptions,
+        child: UserAvatar(
+          size: 100,
+          imageUrl: _currentImageUrl,
+          name: _profile?.displayName,
+        ),
+      );
+    }
+
+    final String formattedPhone = _profile?.phone ?? '';
 
     return Scaffold(
       backgroundColor: bg,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF0F1013),
-        leading: TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text(
-            'Cancel',
-            style: TextStyle(color: Colors.white),
-            overflow: TextOverflow.visible,
-          ),
-        ),
-        title: const SizedBox.shrink(),
-        centerTitle: true,
-        actions: [
-          TextButton(
-            onPressed: _isLoading || !_hasUnsavedChanges ? null : _saveProfile,
-            child: Text(
-              'Save',
-              style: TextStyle(
-                color:
-                    _isLoading || !_hasUnsavedChanges
-                        ? Colors.grey
-                        : Color(0xFF4DA3FF),
+        backgroundColor: bg,
+        elevation: 0,
+        automaticallyImplyLeading: false,
+        titleSpacing: 0,
+        title: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: const Text(
+                'Cancel',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w400,
+                ),
               ),
             ),
-          ),
-        ],
+            TextButton(
+              onPressed: _isSaving ? null : _save,
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child:
+                  _isSaving
+                      ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                      : const Text(
+                        'Save',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 17,
+                          fontWeight: FontWeight.w400,
+                        ),
+                      ),
+            ),
+          ],
+        ),
       ),
-      body: SafeArea(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            return _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : SingleChildScrollView(
-                  physics: const BouncingScrollPhysics(),
-                  padding: const EdgeInsets.all(20),
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(
-                      minHeight: constraints.maxHeight,
-                    ),
-                    child: IntrinsicHeight(
-                      child: Form(
-                        key: _formKey,
+      body:
+          _isLoading
+              ? const Center(
+                child: CircularProgressIndicator(
+                  color: Color(0xFF4DA3FF),
+                  strokeWidth: 2,
+                ),
+              )
+              : SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      const SizedBox(height: 20),
+
+                      // ── Avatar ──
+                      avatarWidget,
+
+                      const SizedBox(height: 10),
+
+                      // ── Set new photo ──
+                      GestureDetector(
+                        onTap: _showImageOptions,
+                        child: const Text(
+                          'Set new photo',
+                          style: TextStyle(
+                            color: accent,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w400,
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 28),
+
+                      // ── First name + Last name grouped ──
+                      Container(
+                        decoration: BoxDecoration(
+                          color: cardBg,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
                         child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            // Avatar + "Set new photo"
-                            Center(
-                              child: Column(
-                                children: [
-                                  Container(
-                                    width: 110,
-                                    height: 110,
-                                    decoration: const BoxDecoration(
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: InkWell(
-                                      borderRadius: BorderRadius.circular(60),
-                                      onTap: _showImageSourceOptions,
-                                      child: CircleAvatar(
-                                        radius: 55,
-                                        backgroundColor: Colors.grey[850],
-                                        backgroundImage:
-                                            _pickedImageFile != null
-                                                ? FileImage(_pickedImageFile!)
-                                                    as ImageProvider
-                                                : (_profileImageUrl != null &&
-                                                        _profileImageUrl!
-                                                            .isNotEmpty
-                                                    ? NetworkImage(
-                                                      _profileImageUrl!,
-                                                    )
-                                                    : const AssetImage(
-                                                      'assets/images/default_avatar.jpg',
-                                                    )),
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  InkWell(
-                                    onTap: _showImageSourceOptions,
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Text(
-                                          'Set new photo',
-                                          style: TextStyle(
-                                            color: accent,
-                                            fontSize: 16,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 6),
-                                        Icon(
-                                          Icons.edit,
-                                          color: accent,
-                                          size: 18,
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
+                            _inputRow('First name', _firstNameController),
+                            _divider(),
+                            _inputRow('Last name', _lastNameController),
+                          ],
+                        ),
+                      ),
 
-                            const SizedBox(height: 24),
+                      const SizedBox(height: 12),
 
-                            // Name
-                            const Text(
-                              'Name',
-                              style: TextStyle(color: Colors.grey),
-                            ),
-                            const SizedBox(height: 8),
-                            Container(
-                              decoration: BoxDecoration(
-                                color: card,
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              child: TextFormField(
-                                controller: _nameController,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 18,
-                                ),
-                                decoration: const InputDecoration(
-                                  contentPadding: EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                    vertical: 18,
-                                  ),
-                                  border: InputBorder.none,
-                                ),
-                                validator:
-                                    (v) =>
-                                        (v == null || v.trim().isEmpty)
-                                            ? 'Please enter your name'
-                                            : null,
-                              ),
-                            ),
+                      // ── Bio ──
+                      Container(
+                        decoration: BoxDecoration(
+                          color: cardBg,
+                          borderRadius: BorderRadius.circular(25),
+                        ),
+                        child: _inputRow('Bio', _bioController),
+                      ),
 
-                            const SizedBox(height: 12),
+                      const SizedBox(height: 12),
 
-                            // Number + Change number (onTap blank)
-                            const Text(
-                              'Number',
-                              style: TextStyle(color: Colors.grey),
-                            ),
-                            const SizedBox(height: 8),
-                            Container(
-                              decoration: BoxDecoration(
-                                color: card,
-                                borderRadius: BorderRadius.circular(16),
-                              ),
+                      // ── Link ──
+                      Container(
+                        decoration: BoxDecoration(
+                          color: cardBg,
+                          borderRadius: BorderRadius.circular(25),
+                        ),
+                        child: _inputRow('Link', _linkController),
+                      ),
+
+                      const SizedBox(height: 12),
+
+                      // ── Change number / Channel / Group grouped ──
+                      Container(
+                        decoration: BoxDecoration(
+                          color: cardBg,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Column(
+                          children: [
+                            // Change number row — display only, no impl yet
+                            Padding(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 16,
                                 vertical: 14,
                               ),
                               child: Row(
                                 children: [
-                                  Expanded(
-                                    child: Text(
-                                      _userData?['phone'] ??
-                                          _currentUser?.phoneNumber ??
-                                          'N/A',
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 18,
-                                      ),
+                                  const Text(
+                                    'Change number',
+                                    style: TextStyle(
+                                      color: Color(0xFF6B6E75),
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w400,
                                     ),
                                   ),
-                                  InkWell(
-                                    onTap: () {
-                                      // Change number screen - placeholder
-                                    },
-                                    child: Text(
-                                      'Change number',
-                                      style: TextStyle(
-                                        color: accent,
-                                        fontSize: 16,
-                                      ),
+                                  const Spacer(),
+                                  Text(
+                                    formattedPhone,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w400,
                                     ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  const Icon(
+                                    Icons.chevron_right,
+                                    color: Color(0xFF6B6E75),
+                                    size: 20,
                                   ),
                                 ],
                               ),
                             ),
 
-                            const SizedBox(height: 12),
+                            _divider(),
 
-                            // Bio
-                            const Text(
-                              'Bio',
-                              style: TextStyle(color: Colors.grey),
-                            ),
-                            const SizedBox(height: 8),
-                            Container(
-                              decoration: BoxDecoration(
-                                color: card,
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              child: TextFormField(
-                                controller: _bioController,
-                                maxLines: 3,
-                                style: const TextStyle(color: Colors.white),
-                                decoration: const InputDecoration(
-                                  contentPadding: EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                    vertical: 12,
-                                  ),
-                                  border: InputBorder.none,
-                                  hintText: 'No bio yet',
-                                  hintStyle: TextStyle(color: Colors.grey),
+                            // Channel row — no impl yet
+                            InkWell(
+                              onTap: () {},
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 14,
                                 ),
-                              ),
-                            ),
-
-                            const SizedBox(height: 12),
-
-                            // Links
-                            const Text(
-                              'Links',
-                              style: TextStyle(color: Colors.grey),
-                            ),
-                            const SizedBox(height: 8),
-                            Container(
-                              decoration: BoxDecoration(
-                                color: card,
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              child: ListTile(
-                                title: const Text(
-                                  'Add links',
-                                  style: TextStyle(
-                                    color: Color(0xFF4DA3FF),
-                                    fontSize: 18,
-                                  ),
-                                ),
-                                trailing: const Icon(
-                                  Icons.add,
-                                  color: Color(0xFF4DA3FF),
-                                ),
-                                onTap: _showAddLinkDialog,
-                              ),
-                            ),
-
-                            // show added links
-                            if (_links.isNotEmpty) ...[
-                              const SizedBox(height: 8),
-                              Column(
-                                children: List.generate(_links.length, (i) {
-                                  final link = _links[i];
-                                  return Container(
-                                    margin: const EdgeInsets.only(bottom: 8),
-                                    decoration: BoxDecoration(
-                                      color: card,
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: ListTile(
-                                      title: Text(
-                                        link,
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                        ),
-                                      ),
-                                      trailing: IconButton(
-                                        icon: const Icon(
-                                          Icons.delete_outline,
-                                          color: Colors.red,
-                                        ),
-                                        onPressed: () => _removeLinkAt(i),
+                                child: Row(
+                                  children: const [
+                                    Text(
+                                      'Channel',
+                                      style: TextStyle(
+                                        color: Color(0xFF6B6E75),
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w400,
                                       ),
                                     ),
-                                  );
-                                }),
-                              ),
-                            ],
-
-                            const SizedBox(height: 16),
-
-                            // Channels and Groups (placeholder)
-                            const Text(
-                              'Channels and Groups',
-                              style: TextStyle(color: Colors.grey),
-                            ),
-                            const SizedBox(height: 8),
-                            Container(
-                              decoration: BoxDecoration(
-                                color: card,
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              child: ListTile(
-                                title: const Text(
-                                  'Add +',
-                                  style: TextStyle(
-                                    color: Color(0xFF4DA3FF),
-                                    fontSize: 18,
-                                  ),
-                                ),
-                                onTap: () {
-                                  // add channels/groups logic later
-                                },
-                              ),
-                            ),
-
-                            const SizedBox(height: 12),
-
-                            // Add another account (placeholder)
-                            Container(
-                              padding: const EdgeInsets.symmetric(vertical: 8),
-                              child: Text(
-                                'You can use 3 multiple accounts in your device with different numbers.',
-                                style: TextStyle(color: Colors.grey[400]),
-                                textAlign: TextAlign.left,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Container(
-                              decoration: BoxDecoration(
-                                color: card,
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              child: ListTile(
-                                title: const Center(
-                                  child: Text(
-                                    'Add another account',
-                                    style: TextStyle(
-                                      color: Color(0xFF4DA3FF),
-                                      fontSize: 18,
+                                    Spacer(),
+                                    Text(
+                                      'Add',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w400,
+                                      ),
                                     ),
-                                  ),
-                                ),
-                                onTap: () {
-                                  // placeholder for adding another account
-                                },
-                              ),
-                            ),
-
-                            const SizedBox(height: 16),
-
-                            // Log Out
-                            Container(
-                              decoration: BoxDecoration(
-                                color: card,
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              child: ListTile(
-                                title: Center(
-                                  child: Text(
-                                    'Log Out',
-                                    style: TextStyle(
-                                      color: Colors.red,
-                                      fontSize: 18,
+                                    SizedBox(width: 4),
+                                    Icon(
+                                      Icons.chevron_right,
+                                      color: Color(0xFF6B6E75),
+                                      size: 20,
                                     ),
-                                  ),
+                                  ],
                                 ),
-                                onTap: _confirmLogout,
                               ),
                             ),
 
-                            const SizedBox(height: 24),
+                            _divider(),
+
+                            // Group row — no impl yet
+                            InkWell(
+                              onTap: () {},
+                              borderRadius: const BorderRadius.only(
+                                bottomLeft: Radius.circular(14),
+                                bottomRight: Radius.circular(14),
+                              ),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 14,
+                                ),
+                                child: Row(
+                                  children: const [
+                                    Text(
+                                      'Group',
+                                      style: TextStyle(
+                                        color: Color(0xFF6B6E75),
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w400,
+                                      ),
+                                    ),
+                                    Spacer(),
+                                    Text(
+                                      'Add',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w400,
+                                      ),
+                                    ),
+                                    SizedBox(width: 4),
+                                    Icon(
+                                      Icons.chevron_right,
+                                      color: Color(0xFF6B6E75),
+                                      size: 20,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
                           ],
                         ),
                       ),
-                    ),
+
+                      const SizedBox(height: 28),
+
+                      // ── Log out ──
+                      GestureDetector(
+                        onTap: _logout,
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          decoration: BoxDecoration(
+                            color: cardBg,
+                            borderRadius: BorderRadius.circular(25),
+                          ),
+                          child: const Center(
+                            child: Text(
+                              'Log out',
+                              style: TextStyle(
+                                color: Color(0xFFE05252),
+                                fontSize: 16,
+                                fontWeight: FontWeight.w400,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 40),
+                    ],
                   ),
-                );
-          },
-        ),
-      ),
+                ),
+              ),
     );
   }
 }

@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 
 import 'package:wrytte/ui/auth/auth_entry_screen.dart';
 import 'package:wrytte/ui/auth/email_verification_page.dart';
 import 'package:wrytte/ui/auth/login_email_verification_page.dart';
-import 'package:wrytte/ui/auth/login_otp_page.dart';
 import 'package:wrytte/ui/auth/phone_auth_page.dart';
 import 'package:wrytte/ui/auth/otp_verification_page.dart';
 import 'package:wrytte/ui/auth/add_profile_page.dart';
@@ -18,18 +18,37 @@ import 'package:wrytte/ui/widgets/theme_wrapper.dart';
 
 import 'package:wrytte/services/call_listener_service.dart';
 import 'package:wrytte/services/auth/auth_service.dart';
-import 'package:wrytte/services/chat/chat_service.dart'; // ⭐ NEW
+import 'package:wrytte/services/chat/chat_service.dart';
 
 import 'firebase_options.dart';
 import 'core/theme.dart';
+import 'package:flutter_native_splash/flutter_native_splash.dart';
+
+const _systemBarColor = Colors.transparent;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  final widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
+  FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
 
-  // Firebase kept temporarily for compatibility with other files
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
   await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+
+  /// TRUE EDGE-TO-EDGE
+  SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+
+  /// SYSTEM BAR COLOR
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: _systemBarColor,
+      systemNavigationBarColor: _systemBarColor,
+      systemNavigationBarDividerColor: _systemBarColor,
+      statusBarIconBrightness: Brightness.light,
+      systemNavigationBarIconBrightness: Brightness.light,
+      systemNavigationBarContrastEnforced: false,
+    ),
+  );
 
   runApp(const WrytteApp());
 }
@@ -81,15 +100,10 @@ class WrytteApp extends StatelessWidget {
           );
         },
 
-        "/login_otp_page": (context) {
-          final args =
-              ModalRoute.of(context)?.settings.arguments
-                  as Map<String, dynamic>?;
-
-          return ThemeWrapper(
-            child: LoginOtpPage(phoneNumber: args?['phone'] ?? ''),
-          );
-        },
+        // LoginOtpPage is always pushed directly from SignInPage —
+        // this is a safe fallback redirect in case anything still
+        // references the named route.
+        '/login_otp_page': (context) => const ThemeWrapper(child: SignInPage()),
 
         "/login_email_verification_page": (context) {
           final args =
@@ -129,8 +143,6 @@ class _AuthWrapperState extends State<AuthWrapper> {
   String? _currentUserId;
 
   final CallListenerService _callListener = CallListenerService();
-
-  /// ⭐ GLOBAL CHAT SERVICE INSTANCE
   final ChatService _chatService = ChatService();
 
   @override
@@ -142,51 +154,53 @@ class _AuthWrapperState extends State<AuthWrapper> {
   @override
   void dispose() {
     _callListener.stopListening();
-
-    /// Optional safety
     _chatService.disconnect();
-
     super.dispose();
   }
 
   Future<void> _checkLoginStatus() async {
     try {
+      // ── Primary check: Firebase persistent session ──────────────────
+      // Firebase automatically restores the session across app restarts.
+      // If the user is signed in with Firebase, we trust that and use
+      // their Firebase UID as the userId for the session.
+      final firebaseUser = FirebaseAuth.instance.currentUser;
+
+      if (firebaseUser != null) {
+        // Firebase says the user is signed in — go straight to HomeScreen
+        await _onAuthSuccess(firebaseUser.uid);
+        return;
+      }
+
+      // ── Fallback: custom backend token check ────────────────────────
+      // Handles users who were logged in via the custom backend before
+      // Firebase auth was introduced.
       final loggedIn = await AuthService.instance.isLoggedIn();
 
       if (!mounted) return;
+      FlutterNativeSplash.remove();
 
-      final currentUser = await AuthService.instance.getCurrentUser();
-      final userId = currentUser?.userId;
+      if (loggedIn) {
+        final currentUser = await AuthService.instance.getCurrentUser();
+        final userId = currentUser?.userId;
 
-      if (loggedIn && userId != null) {
-        /// ⭐ CONNECT CHAT SERVICE ONCE
-        try {
-          await _chatService.connect();
-          debugPrint("ChatService connected successfully");
-        } catch (e) {
-          debugPrint("ChatService connection error: $e");
+        if (userId != null) {
+          await _onAuthSuccess(userId);
+          return;
         }
-
-        setState(() {
-          _isLoggedIn = true;
-          _isLoading = false;
-          _currentUserId = userId;
-        });
-
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          _callListener.startListening(context);
-        });
-      } else {
-        setState(() {
-          _isLoggedIn = false;
-          _isLoading = false;
-        });
       }
+
+      // Not logged in via either method
+      if (!mounted) return;
+      FlutterNativeSplash.remove();
+      setState(() {
+        _isLoggedIn = false;
+        _isLoading = false;
+      });
     } catch (e) {
       debugPrint("Auth check error: $e");
-
       if (!mounted) return;
-
+      FlutterNativeSplash.remove();
       setState(() {
         _isLoading = false;
         _isLoggedIn = false;
@@ -194,11 +208,36 @@ class _AuthWrapperState extends State<AuthWrapper> {
     }
   }
 
+  // ── Shared setup once auth is confirmed ──────────────────────────────────
+
+  Future<void> _onAuthSuccess(String userId) async {
+    if (!mounted) return;
+    FlutterNativeSplash.remove();
+
+    try {
+      await _chatService.connect();
+      debugPrint("ChatService connected successfully");
+    } catch (e) {
+      debugPrint("ChatService connection error: $e");
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _isLoggedIn = true;
+      _isLoading = false;
+      _currentUserId = userId;
+    });
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _callListener.startListening(context);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
       return const Scaffold(
-        backgroundColor: Color(0xFF0F1013),
+        backgroundColor: Color(0xFF08090B),
         body: Center(
           child: CircularProgressIndicator(
             valueColor: AlwaysStoppedAnimation<Color>(Colors.white),

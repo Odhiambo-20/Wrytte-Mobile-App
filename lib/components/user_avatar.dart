@@ -5,6 +5,7 @@ class UserAvatar extends StatelessWidget {
   final double size;
   final ImageProvider? image;
   final String? imageUrl;
+  final String? name;
   final VoidCallback? onTap;
   final String? heroTag;
 
@@ -13,9 +14,9 @@ class UserAvatar extends StatelessWidget {
     this.size = 40.0,
     this.image,
     this.imageUrl,
+    this.name,
     this.onTap,
     this.heroTag,
-    required String name,
   });
 
   @override
@@ -23,10 +24,8 @@ class UserAvatar extends StatelessWidget {
     Widget avatarWidget;
 
     if (image != null) {
-      // Use provided ImageProvider if available
-      avatarWidget = _buildAvatarContainer(image!);
+      avatarWidget = _buildFromImageProvider(image!);
     } else if (imageUrl != null && imageUrl!.isNotEmpty) {
-      // Use CachedNetworkImage if URL is provided
       avatarWidget = ClipOval(
         child: CachedNetworkImage(
           imageUrl: imageUrl!,
@@ -38,47 +37,61 @@ class UserAvatar extends StatelessWidget {
         ),
       );
     } else {
-      // Use new icon avatar
       avatarWidget = _buildPlaceholder();
     }
 
-    final wrappedWidget = GestureDetector(
+    final wrapped = GestureDetector(
       onTap: onTap,
-      child: Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(shape: BoxShape.circle),
-        child: avatarWidget,
-      ),
+      child: SizedBox(width: size, height: size, child: avatarWidget),
     );
 
-    return heroTag != null
-        ? Hero(tag: heroTag!, child: wrappedWidget)
-        : wrappedWidget;
+    return heroTag != null ? Hero(tag: heroTag!, child: wrapped) : wrapped;
   }
 
-  Widget _buildAvatarContainer(ImageProvider imageProvider) {
+  Widget _buildFromImageProvider(ImageProvider provider) {
     return Container(
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        image: DecorationImage(image: imageProvider, fit: BoxFit.cover),
+        image: DecorationImage(image: provider, fit: BoxFit.cover),
       ),
     );
   }
 
   Widget _buildPlaceholder() {
+    // Show initials if name is available, otherwise icon
+    final initials = _getInitials(name);
+
     return Container(
       decoration: const BoxDecoration(
         shape: BoxShape.circle,
-        color: Color(0xFF0F2A44), // dark blue background
+        color: Color(0xFF0F2A44),
       ),
       child: Center(
-        child: Icon(
-          Icons.person,
-          size: size * 0.5,
-          color: Color(0xFF4DA3FF), // light blue icon
-        ),
+        child:
+            initials != null
+                ? Text(
+                  initials,
+                  style: TextStyle(
+                    color: const Color(0xFF4DA3FF),
+                    fontSize: size * 0.36,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.5,
+                  ),
+                )
+                : Icon(
+                  Icons.person,
+                  size: size * 0.5,
+                  color: const Color(0xFF4DA3FF),
+                ),
       ),
     );
+  }
+
+  /// Returns up to 2 initials from the name, or null if name is empty.
+  String? _getInitials(String? name) {
+    if (name == null || name.trim().isEmpty) return null;
+    final parts = name.trim().split(RegExp(r'\s+'));
+    if (parts.length == 1) return parts[0][0].toUpperCase();
+    return (parts[0][0] + parts[1][0]).toUpperCase();
   }
 }

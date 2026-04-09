@@ -9,7 +9,7 @@ class AuthEntryScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0F1013),
+      backgroundColor: const Color(0xFF08090B),
       body: SafeArea(
         child: Center(
           child: Padding(

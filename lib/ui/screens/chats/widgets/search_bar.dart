@@ -22,37 +22,52 @@ class _SearchBarState extends State<SearchBar> {
   }
 
   @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        height: 40,
+        height: 44,
         decoration: BoxDecoration(
           color: const Color(0xFF23262C),
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(20),
         ),
         child: Stack(
           alignment: Alignment.center,
           children: [
             TextField(
               controller: _controller,
-              style: const TextStyle(color: Colors.white),
+              style: const TextStyle(color: Colors.white, fontSize: 15),
               cursorColor: Colors.white,
               decoration: const InputDecoration(
                 isCollapsed: true,
                 border: InputBorder.none,
+                contentPadding: EdgeInsets.symmetric(horizontal: 12),
               ),
             ),
             if (!_isTyping)
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                mainAxisSize: MainAxisSize.min,
-                children: const [
-                  Icon(Icons.search, color: Colors.grey, size: 20),
-                  SizedBox(width: 6),
-                  Text('Search', style: TextStyle(color: Colors.grey)),
-                ],
+              IgnorePointer(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: const [
+                    Icon(Icons.search, color: Colors.grey, size: 18),
+                    SizedBox(width: 6),
+                    Text(
+                      'Search',
+                      style: TextStyle(
+                        color: Colors.grey,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ),
+                  ],
+                ),
               ),
           ],
         ),

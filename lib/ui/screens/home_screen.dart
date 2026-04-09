@@ -16,7 +16,7 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  int _currentIndex = 1; // Default to Conversations
+  int _currentIndex = 1; // Default to Chats
   int _totalUnreadCount = 0;
 
   void _onTabTapped(int index) {
@@ -25,7 +25,6 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  // Method to update unread count from ChatsScreen
   void _updateUnreadCount(int count) {
     if (mounted) {
       setState(() {
@@ -34,13 +33,15 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // Build the current screen based on index
   Widget _buildCurrentScreen() {
     switch (_currentIndex) {
       case 0:
         return const ShopsScreen();
       case 1:
-        return ConversationsScreen();
+        return ConversationsScreen(
+          onUnreadCountUpdated: _updateUnreadCount,
+          currentUserId: widget.currentUserId,
+        );
       case 2:
         return const PostScreen();
       case 3:
@@ -48,14 +49,33 @@ class _HomeScreenState extends State<HomeScreen> {
       case 4:
         return const SettingsScreen();
       default:
-        return ConversationsScreen(onUnreadCountUpdated: _updateUnreadCount);
+        return ConversationsScreen(
+          onUnreadCountUpdated: _updateUnreadCount,
+          currentUserId: widget.currentUserId,
+        );
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: _buildCurrentScreen(),
+      // CRITICAL FOR GLASS UI
+      extendBody: true,
+      extendBodyBehindAppBar: true,
+      backgroundColor: Colors.transparent,
+
+      // REAL BACKGROUND (not Scaffold)
+      body: Stack(
+        children: [
+          // Background layer
+          Container(color: const Color(0xFF08090B)),
+
+          // Screen content
+          Positioned.fill(child: _buildCurrentScreen()),
+        ],
+      ),
+
+      // FLOATING GLASS NAV
       bottomNavigationBar: BottomNavBar(
         currentIndex: _currentIndex,
         onTap: _onTabTapped,

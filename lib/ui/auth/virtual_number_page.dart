@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:wrytte/services/auth/virtual_number_service.dart';
@@ -13,6 +14,7 @@ class VirtualNumberPage extends StatefulWidget {
 
 class _VirtualNumberPageState extends State<VirtualNumberPage> {
   final TextEditingController _emailCtrl = TextEditingController();
+  final FocusNode _focusNode = FocusNode();
 
   final VirtualNumberService _service = VirtualNumberService(
     baseUrl: "https://wryttedev.azurewebsites.net",
@@ -33,6 +35,7 @@ class _VirtualNumberPageState extends State<VirtualNumberPage> {
   @override
   void dispose() {
     _emailCtrl.dispose();
+    _focusNode.dispose();
     super.dispose();
   }
 
@@ -112,188 +115,276 @@ class _VirtualNumberPageState extends State<VirtualNumberPage> {
     }
   }
 
+  String _formatVirtualNumber(String number) {
+    if (number.length <= 2) return number;
+
+    String first = number.substring(0, 2);
+    String second =
+        number.length > 5 ? number.substring(2, 5) : number.substring(2);
+    String third =
+        number.length > 8
+            ? number.substring(5, 8)
+            : (number.length > 5 ? number.substring(5) : "");
+    String fourth = number.length > 8 ? number.substring(8) : "";
+
+    return [first, second, third, fourth].where((e) => e.isNotEmpty).join(" ");
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0F1013),
+      backgroundColor: const Color(0xFF08090B),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
-          child: Column(
-            children: [
-              ///  BACK
-              Align(
-                alignment: Alignment.centerLeft,
-                child: IconButton(
-                  icon: const Icon(Icons.arrow_back, color: Colors.white),
-                  onPressed: () => Navigator.pop(context),
-                ),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              padding: EdgeInsets.fromLTRB(
+                24,
+                16,
+                24,
+                MediaQuery.of(context).viewInsets.bottom + 20,
               ),
-
-              const SizedBox(height: 16),
-
-              /// TITLE
-              const Text(
-                "Wrytte ID number",
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 24,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-
-              const SizedBox(height: 8),
-
-              const Text(
-                "Please enter your Email.",
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white54, fontSize: 14),
-              ),
-
-              const SizedBox(height: 8),
-
-              ///  CHOOSE ANOTHER
-              GestureDetector(
-                onTap: _vpnLoading ? null : _fetchVpn,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: const [
-                    Text(
-                      "Choose another ",
-                      style: TextStyle(color: Colors.white54, fontSize: 14),
-                    ),
-                    Text(
-                      "Wrytte ID number",
-                      style: TextStyle(color: Color(0xFF4DA3FF), fontSize: 14),
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 28),
-
-              /// INPUT CARD
-              Container(
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF23262C),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 14,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    ///  VIRTUAL NUMBER (FROM BACKEND)
-                    _vpnLoading
-                        ? const Center(
-                          child: Padding(
-                            padding: EdgeInsets.symmetric(vertical: 8),
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                child: IntrinsicHeight(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      ///  BACK
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: IconButton(
+                          icon: const Icon(
+                            Icons.arrow_back,
+                            color: Colors.white,
                           ),
-                        )
-                        : Text(
-                          "+ $_virtualNumber",
-                          style: const TextStyle(
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                      ),
+
+                      const SizedBox(height: 16),
+
+                      /// TITLE
+                      const Center(
+                        child: Text(
+                          "Wrytte ID number",
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
                             color: Colors.white,
                             fontSize: 20,
-                            letterSpacing: 1.1,
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
-
-                    const SizedBox(height: 12),
-                    const Divider(color: Colors.white24),
-
-                    ///  EMAIL INPUT
-                    TextField(
-                      controller: _emailCtrl,
-                      keyboardType: TextInputType.emailAddress,
-                      style: const TextStyle(color: Colors.white),
-                      inputFormatters: [
-                        FilteringTextInputFormatter.deny(RegExp(r'\s')),
-                      ],
-                      decoration: const InputDecoration(
-                        hintText: "Enter your email",
-                        hintStyle: TextStyle(color: Colors.white38),
-                        border: InputBorder.none,
                       ),
-                      onChanged: _validateEmail,
-                    ),
-                  ],
-                ),
-              ),
 
-              const SizedBox(height: 24),
+                      const SizedBox(height: 8),
 
-              /// Terms Text
-              Wrap(
-                children: [
-                  const Text(
-                    "By entering your email and tapping “Next,” you agree to ",
-                    style: TextStyle(color: Colors.white70),
-                  ),
-                  GestureDetector(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const TermsPrivacyPage(),
-                        ),
-                      );
-                    },
-                    child: const Text(
-                      "Wrytte’s Terms and Conditions and Privacy Policy",
-                      style: TextStyle(color: Color(0xFF4DA3FF)),
-                    ),
-                  ),
-                ],
-              ),
-
-              const Spacer(),
-
-              /// NEXT BUTTON
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed:
-                      _emailValid && !_isLoading && !_vpnLoading
-                          ? _submit
-                          : null,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor:
-                        _emailValid
-                            ? const Color(0xFF4DA3FF)
-                            : const Color(0xFF23262C),
-                    disabledBackgroundColor: const Color(0xFF23262C),
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                  ),
-                  child:
-                      _isLoading
-                          ? const SizedBox(
-                            height: 22,
-                            width: 22,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                          : const Text(
-                            "Next",
-                            style: TextStyle(fontSize: 16, color: Colors.white),
+                      const Center(
+                        child: Text(
+                          "Please enter your Email.",
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Colors.white60,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            height: 1.1,
                           ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 0),
+                      Center(
+                        child: GestureDetector(
+                          onTap: _vpnLoading ? null : _fetchVpn,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            mainAxisSize: MainAxisSize.min,
+                            children: const [
+                              Text(
+                                "Choose another ",
+                                style: TextStyle(
+                                  color: Colors.white60,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              Text(
+                                "Wrytte ID number",
+                                style: TextStyle(
+                                  color: Color(0xFF4DA3FF),
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 30),
+
+                      /// INPUT CARD
+                      Container(
+                        width: double.infinity,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF23262C),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 10, // <-- REDUCED from 14 to 10
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            ///  VIRTUAL NUMBER (FROM BACKEND)
+                            _vpnLoading
+                                ? const Center(
+                                  child: Padding(
+                                    padding: EdgeInsets.symmetric(
+                                      vertical: 4,
+                                    ), // <-- REDUCED from 8 to 4
+                                    child: SizedBox(
+                                      height:
+                                          14, // <-- OPTIONAL: reduced from 16 to 14
+                                      width:
+                                          14, // <-- OPTIONAL: reduced from 16 to 14
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                                )
+                                : Text(
+                                  "+${_formatVirtualNumber(_virtualNumber)}",
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize:
+                                        15, // <-- OPTIONAL: reduced from 16 to 15
+                                    letterSpacing: 1.1,
+                                  ),
+                                ),
+
+                            const SizedBox(
+                              height: 8,
+                            ), // <-- REDUCED from 12 to 8
+                            const Divider(color: Colors.white24),
+
+                            ///  EMAIL INPUT
+                            TextField(
+                              controller: _emailCtrl,
+                              focusNode: _focusNode,
+                              keyboardType: TextInputType.emailAddress,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize:
+                                    15, // <-- OPTIONAL: reduced from default to 15
+                              ),
+                              inputFormatters: [
+                                FilteringTextInputFormatter.deny(RegExp(r'\s')),
+                              ],
+                              decoration: const InputDecoration(
+                                hintText: "Enter your email",
+                                hintStyle: TextStyle(
+                                  color: Colors.white54,
+                                  fontSize:
+                                      15, // <-- OPTIONAL: reduced from default to 15
+                                ),
+                                border: InputBorder.none,
+                                isDense: true, // <-- ADD THIS for compact input
+                              ),
+                              onChanged: _validateEmail,
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      const SizedBox(height: 24),
+
+                      /// Terms Text
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 15),
+                        child: RichText(
+                          textAlign: TextAlign.center,
+                          text: TextSpan(
+                            style: const TextStyle(color: Colors.white),
+                            children: [
+                              const TextSpan(
+                                text:
+                                    "By entering your email and tapping “Next,” you agree to ",
+                              ),
+                              TextSpan(
+                                text:
+                                    "Wrytte’s Terms and Conditions and Privacy Policy",
+                                style: const TextStyle(
+                                  color: Color(0xFF4DA3FF),
+                                ),
+                                recognizer:
+                                    TapGestureRecognizer()
+                                      ..onTap = () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder:
+                                                (_) => const TermsPrivacyPage(),
+                                          ),
+                                        );
+                                      },
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                      const Spacer(),
+
+                      /// NEXT BUTTON
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed:
+                              _emailValid && !_isLoading && !_vpnLoading
+                                  ? _submit
+                                  : null,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor:
+                                _emailValid
+                                    ? const Color(0xFF4DA3FF)
+                                    : const Color(0xFF23262C),
+                            disabledBackgroundColor: const Color(0xFF23262C),
+                            foregroundColor:
+                                _emailValid ? Colors.white : Colors.grey,
+                            disabledForegroundColor: Colors.grey,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                          ),
+                          child:
+                              _isLoading
+                                  ? const SizedBox(
+                                    height: 20,
+                                    width: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                  : const Text(
+                                    "Next",
+                                    style: TextStyle(fontSize: 16),
+                                  ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 50),
+                    ],
+                  ),
                 ),
               ),
-            ],
-          ),
+            );
+          },
         ),
       ),
     );

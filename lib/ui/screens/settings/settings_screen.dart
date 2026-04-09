@@ -1,113 +1,96 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:wrytte/components/user_avatar.dart';
-import 'package:wrytte/services/auth/auth_service.dart';
-import 'package:wrytte/ui/auth/auth_entry_screen.dart';
+import 'package:wrytte/models/user_models/user_profile_service.dart';
+import 'package:wrytte/services/user/user_profile_service.dart';
 import 'package:wrytte/ui/screens/profile_screen.dart';
 
-class SettingsScreen extends StatelessWidget {
+class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
 
-  /// Logout function
-  Future<void> _logout(BuildContext context) async {
-    try {
-      await AuthService.instance.logout();
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
 
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (_) => const AuthEntryScreen()),
-        (route) => false,
-      );
-    } catch (e) {
-      debugPrint("Logout failed: $e");
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Logout failed: $e")));
+class _SettingsScreenState extends State<SettingsScreen> {
+  final ScrollController _scrollController = ScrollController();
+  double _searchBarProgress = 0.0;
+
+  static const double _kSearchBarHeight = 56.0;
+  static const double _pillHeight = 44.0;
+
+  UserProfile? _profile;
+  bool _profileLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_onScroll);
+    _loadProfile();
+  }
+
+  Future<void> _loadProfile() async {
+    final profile = await UserProfileService.instance.getCurrentUserProfile();
+    if (!mounted) return;
+    setState(() {
+      _profile = profile;
+      _profileLoading = false;
+    });
+  }
+
+  void _onScroll() {
+    final offset = _scrollController.offset;
+    final progress = (offset / _kSearchBarHeight).clamp(0.0, 1.0);
+    if ((progress - _searchBarProgress).abs() > 0.005) {
+      setState(() => _searchBarProgress = progress);
     }
   }
 
   @override
+  void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final double statusBarHeight = MediaQuery.of(context).padding.top;
+    final double screenHeight = MediaQuery.of(context).size.height;
+
+    const double topBarHeight = kToolbarHeight;
+    final double headerHeight =
+        statusBarHeight + topBarHeight + _kSearchBarHeight + 8.0;
+
+    final double searchBarOffset = _kSearchBarHeight * _searchBarProgress;
+    final double gradientHeight = headerHeight - searchBarOffset;
+
     return Scaffold(
-      backgroundColor: const Color(0xFF0F1013),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF0F1013),
-        elevation: 0,
-        title: const Text(
-          "Settings",
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        centerTitle: true,
-        actions: [
-          IconButton(
-            onPressed: () {},
-            icon: const Icon(Icons.qr_code_2_rounded, color: Colors.white),
-          ),
-        ],
-      ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Profile Section
-              FutureBuilder<DocumentSnapshot>(
-                future:
-                    FirebaseFirestore.instance
-                        .collection('users')
-                        .doc(FirebaseAuth.instance.currentUser?.uid)
-                        .get(),
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(
-                      child: CircularProgressIndicator(color: Colors.white),
-                    );
-                  }
-
-                  if (!snapshot.hasData || !snapshot.data!.exists) {
-                    return Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF0F1013),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: Color(0xFF23262C), width: 1),
-                      ),
-                      child: Row(
-                        children: [
-                          UserAvatar(size: 60, name: ''),
-                          const SizedBox(width: 16),
-                          const Text(
-                            'User',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  }
-
-                  final userData =
-                      snapshot.data!.data() as Map<String, dynamic>?;
-                  final name = userData?['name'] ?? 'User';
-                  final phone =
-                      userData?['phone'] ??
-                      FirebaseAuth.instance.currentUser?.phoneNumber ??
-                      'N/A';
-                  final profileImageUrl = userData?['profileImage']?.toString();
-
-                  return InkWell(
+      backgroundColor: const Color(0xFF08090B),
+      extendBodyBehindAppBar: true,
+      body: Stack(
+        children: [
+          // ── Layer 1: scrollable content ─────────────────────────────────
+          SingleChildScrollView(
+            controller: _scrollController,
+            physics: const BouncingScrollPhysics(
+              parent: AlwaysScrollableScrollPhysics(),
+            ),
+            padding: EdgeInsets.only(
+              top: headerHeight,
+              left: 16,
+              right: 16,
+              bottom: 120,
+            ),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                minHeight: screenHeight - headerHeight + _kSearchBarHeight + 40,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  /// PROFILE TILE
+                  InkWell(
                     onTap: () {
                       Navigator.push(
                         context,
@@ -116,48 +99,54 @@ class SettingsScreen extends StatelessWidget {
                         ),
                       );
                     },
-                    borderRadius: BorderRadius.circular(20),
+                    borderRadius: BorderRadius.circular(16),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
+                        horizontal: 14,
+                        vertical: 10,
                       ),
                       decoration: BoxDecoration(
                         color: const Color(0xFF23262C),
-                        borderRadius: BorderRadius.circular(20),
+                        borderRadius: BorderRadius.circular(16),
                       ),
                       child: Row(
                         children: [
-                          CircleAvatar(
-                            radius: 26,
-                            backgroundColor: Colors.grey[800],
-                            backgroundImage:
-                                profileImageUrl != null &&
-                                        profileImageUrl.isNotEmpty
-                                    ? NetworkImage(profileImageUrl)
-                                        as ImageProvider
-                                    : const AssetImage(
-                                      'assets/images/default_avatar.jpg',
-                                    ),
-                          ),
-                          const SizedBox(width: 16),
+                          // Real avatar — imageUrl from Firestore
+                          // falls back to initials, then icon
+                          _profileLoading
+                              ? SizedBox(
+                                width: 50,
+                                height: 50,
+                                child: _buildAvatarShimmer(),
+                              )
+                              : UserAvatar(
+                                size: 50,
+                                imageUrl:
+                                    _profile?.hasProfileImage == true
+                                        ? _profile!.profileImage
+                                        : null,
+                                name: _profile?.displayName,
+                              ),
+                          const SizedBox(width: 14),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  name,
+                                  _profileLoading
+                                      ? '...'
+                                      : (_profile?.displayName ?? 'User'),
                                   style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 18,
-                                    fontWeight: FontWeight.bold,
+                                    fontWeight: FontWeight.w600,
                                   ),
                                 ),
-                                const SizedBox(height: 4),
+                                const SizedBox(height: 2),
                                 Text(
-                                  phone,
+                                  'Profile',
                                   style: const TextStyle(
-                                    color: Colors.grey,
+                                    color: Colors.white54,
                                     fontSize: 14,
                                   ),
                                 ),
@@ -166,72 +155,211 @@ class SettingsScreen extends StatelessWidget {
                           ),
                           const Icon(
                             Icons.arrow_forward_ios,
-                            color: Colors.white,
-                            size: 18,
+                            color: Colors.white38,
+                            size: 16,
                           ),
                         ],
                       ),
                     ),
-                  );
-                },
-              ),
-
-              const SizedBox(height: 20),
-
-              // First Card
-              _buildSettingsCard(
-                context,
-                items: [
-                  _SettingsItem("Cloud Storage", Icons.cloud_outlined),
-                  _SettingsItem(
-                    "V Face Protection",
-                    Icons.verified_user_outlined,
                   ),
-                  _SettingsItem("Linked Devices", Icons.laptop_mac),
-                ],
-              ),
 
-              const SizedBox(height: 20),
+                  const SizedBox(height: 14),
 
-              // Second Card
-              _buildSettingsCard(
-                context,
-                items: [
-                  _SettingsItem("Account", Icons.account_circle_outlined),
-                  _SettingsItem("Privacy", Icons.lock_outline),
-                  _SettingsItem(
-                    "Notification",
-                    Icons.notifications_none_rounded,
-                  ),
-                  _SettingsItem("Appearance", Icons.color_lens_outlined),
-                  _SettingsItem("Chats", Icons.chat_bubble_outline),
-                  _SettingsItem("Data and Storage", Icons.storage_outlined),
-                ],
-              ),
-
-              const SizedBox(height: 20),
-
-              // Logout Button
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Color(0xFF0F1013),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                  /// ADD ACCOUNT
+                  InkWell(
+                    onTap: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text("Add new account coming soon"),
+                          backgroundColor: Colors.white,
+                        ),
+                      );
+                    },
+                    borderRadius: BorderRadius.circular(16),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 14,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF23262C),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Row(
+                        children: const [
+                          Icon(Icons.person_outline, color: Colors.white),
+                          SizedBox(width: 14),
+                          Expanded(
+                            child: Text(
+                              "Add new account",
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                              ),
+                            ),
+                          ),
+                          Icon(Icons.add, color: Colors.white),
+                        ],
+                      ),
                     ),
                   ),
-                  onPressed: () => _logout(context),
-                  icon: const Icon(Icons.logout, color: Colors.white),
-                  label: const Text(
-                    "Logout",
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+
+                  const SizedBox(height: 16),
+
+                  /// SETTINGS CARD
+                  Container(
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF23262C),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Column(
+                      children: [
+                        _buildItem(
+                          context,
+                          title: "Storage",
+                          icon: Icons.folder_outlined,
+                        ),
+                        _divider(),
+                        _buildItem(
+                          context,
+                          title: "VF protection",
+                          icon: Icons.verified_user_outlined,
+                        ),
+                        _divider(),
+                        _buildItem(
+                          context,
+                          title: "Linked devices",
+                          icon: Icons.devices_outlined,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // ── Layer 2: gradient scrim ─────────────────────────────────────
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            height: gradientHeight + 20,
+            child: IgnorePointer(
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    stops: const [0.0, 0.6, 1.0],
+                    colors: [
+                      const Color(0xFF08090B).withOpacity(0.95),
+                      const Color(0xFF08090B).withOpacity(0.75),
+                      const Color(0xFF08090B).withOpacity(0.0),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          // ── Layer 3: animated header ────────────────────────────────────
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildTopBar(statusBarHeight),
+                Transform.translate(
+                  offset: Offset(0, -searchBarOffset),
+                  child: Opacity(
+                    opacity: (1.0 - _searchBarProgress).clamp(0.0, 1.0),
+                    child: const _SettingsSearchBar(),
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Avatar shimmer while loading ──────────────────────────────────────────
+
+  Widget _buildAvatarShimmer() {
+    return Container(
+      decoration: const BoxDecoration(
+        shape: BoxShape.circle,
+        color: Color(0xFF2A2D34),
+      ),
+    );
+  }
+
+  // ── Top bar ───────────────────────────────────────────────────────────────
+
+  Widget _buildTopBar(double statusBarHeight) {
+    return Padding(
+      padding: EdgeInsets.only(top: statusBarHeight),
+      child: SizedBox(
+        height: kToolbarHeight,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              const SizedBox(width: _pillHeight),
+
+              const Expanded(
+                child: Center(
+                  child: Text(
+                    'Settings',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
               ),
 
-              const SizedBox(height: 60),
+              GestureDetector(
+                onTap: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text("QR Code feature coming soon"),
+                      backgroundColor: Color(0xFF23262C),
+                    ),
+                  );
+                },
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(22),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+                    child: Container(
+                      width: _pillHeight,
+                      height: _pillHeight,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF23262C).withOpacity(0.30),
+                        borderRadius: BorderRadius.circular(22),
+                        border: Border.all(
+                          color: const Color(0xFF23262C),
+                          width: 1.0,
+                        ),
+                      ),
+                      alignment: Alignment.center,
+                      child: const Icon(
+                        Icons.qr_code_rounded,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             ],
           ),
         ),
@@ -239,70 +367,127 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
-  // Helper Widget for Cards
-  Widget _buildSettingsCard(
+  // ── Settings item ─────────────────────────────────────────────────────────
+
+  Widget _buildItem(
     BuildContext context, {
-    required List<_SettingsItem> items,
+    required String title,
+    required IconData icon,
   }) {
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF23262C),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Column(
-        children: List.generate(items.length, (index) {
-          final item = items[index];
-          return Column(
-            children: [
-              InkWell(
-                onTap: () {}, // empty for now
-                borderRadius: BorderRadius.circular(20),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 14,
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(item.icon, color: Colors.white, size: 24),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Text(
-                          item.title,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                      const Icon(
-                        Icons.arrow_forward_ios,
-                        color: Colors.white,
-                        size: 18,
-                      ),
-                    ],
-                  ),
-                ),
+    return InkWell(
+      onTap: () {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("$title coming soon"),
+            backgroundColor: Colors.white,
+          ),
+        );
+      },
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        child: Row(
+          children: [
+            Icon(icon, color: Colors.white),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Text(
+                title,
+                style: const TextStyle(color: Colors.white, fontSize: 16),
               ),
-              if (index != items.length - 1)
-                const Divider(
-                  color: Colors.grey,
-                  height: 1,
-                  indent: 56,
-                  endIndent: 16,
-                ),
-            ],
-          );
-        }),
+            ),
+            const Icon(
+              Icons.arrow_forward_ios,
+              color: Colors.white38,
+              size: 16,
+            ),
+          ],
+        ),
       ),
+    );
+  }
+
+  // ── Divider ───────────────────────────────────────────────────────────────
+
+  Widget _divider() {
+    return const Padding(
+      padding: EdgeInsets.only(left: 50),
+      child: Divider(color: Colors.white12, height: 1, thickness: 1),
     );
   }
 }
 
-// Data Holder for Settings Item
-class _SettingsItem {
-  final String title;
-  final IconData icon;
-  _SettingsItem(this.title, this.icon);
+// ── Search bar ────────────────────────────────────────────────────────────────
+
+class _SettingsSearchBar extends StatefulWidget {
+  const _SettingsSearchBar();
+
+  @override
+  State<_SettingsSearchBar> createState() => _SettingsSearchBarState();
+}
+
+class _SettingsSearchBarState extends State<_SettingsSearchBar> {
+  final TextEditingController _controller = TextEditingController();
+  bool _isTyping = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.addListener(() {
+      setState(() => _isTyping = _controller.text.isNotEmpty);
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Container(
+        height: 44,
+        decoration: BoxDecoration(
+          color: const Color(0xFF23262C),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            TextField(
+              controller: _controller,
+              style: const TextStyle(color: Colors.white, fontSize: 15),
+              cursorColor: Colors.white,
+              decoration: const InputDecoration(
+                isCollapsed: true,
+                border: InputBorder.none,
+                contentPadding: EdgeInsets.symmetric(horizontal: 12),
+              ),
+            ),
+            if (!_isTyping)
+              IgnorePointer(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: const [
+                    Icon(Icons.search, color: Colors.grey, size: 18),
+                    SizedBox(width: 6),
+                    Text(
+                      'Search',
+                      style: TextStyle(
+                        color: Colors.grey,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
 }

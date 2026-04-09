@@ -85,10 +85,9 @@ class _OtpVerificationPageState extends State<OtpVerificationPage>
     HapticFeedback.lightImpact();
 
     try {
-      await AuthService.instance.registerRealPhone(
+      await AuthService.instance.authenticatePhone(
         phone: widget.phoneNumber,
         code: _otpController.text,
-        login: true,
       );
 
       if (!mounted) return;
@@ -98,15 +97,18 @@ class _OtpVerificationPageState extends State<OtpVerificationPage>
         MaterialPageRoute(builder: (_) => const AddProfilePage()),
         (_) => false,
       );
-    } catch (_) {
+    } catch (e) {
       HapticFeedback.heavyImpact();
       _shakeController.forward(from: 0);
 
       if (!mounted) return;
+
       setState(() {
         _errorMessage = "Invalid or expired code";
         _otpController.clear();
       });
+
+      debugPrint("OTP ERROR: $e");
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -185,7 +187,7 @@ class _OtpVerificationPageState extends State<OtpVerificationPage>
     final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0F1013),
+      backgroundColor: const Color(0xFF08090B),
       resizeToAvoidBottomInset: true,
       body: SafeArea(
         child: SingleChildScrollView(

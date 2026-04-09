@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:wrytte/models/auth_models/auth_user.dart';
 import 'api_service.dart';
@@ -8,12 +11,122 @@ class AuthService {
 
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
 
+  // Firebase instance — used only for phone OTP verification
+  final FirebaseAuth _firebaseAuth = FirebaseAuth.instance;
+
   static const _tokenKey = "auth_token";
   static const _expiryKey = "auth_token_expiry";
   static const _userIdKey = "user_id";
   static const _usernameKey = "username";
   static const _secretKey = "secret";
   static const _phoneKey = "phone";
+
+  // ───────────────── FIREBASE PHONE AUTH ─────────────────
+  // These two methods handle Firebase OTP — completely separate
+  // from your custom backend logic below. Call sendFirebaseOtp()
+  // first, then verifyFirebaseOtp() with the code the user enters.
+
+  /// Step 1 — Triggers Firebase to send an SMS OTP to [phoneNumber].
+  /// Returns the verificationId and resendToken needed for step 2.
+  Future<Map<String, dynamic>> sendFirebaseOtp(String phoneNumber) async {
+    final completer = _OtpCompleter();
+
+    await _firebaseAuth.verifyPhoneNumber(
+      phoneNumber: phoneNumber,
+      timeout: const Duration(seconds: 60),
+      forceResendingToken: null,
+
+      verificationCompleted: (PhoneAuthCredential credential) async {
+        // Auto-verified (instant verification on some Android devices)
+        // Sign in silently — the UI flow will still complete normally
+        await _firebaseAuth.signInWithCredential(credential);
+      },
+
+      verificationFailed: (FirebaseAuthException e) {
+        completer.completeError(e);
+      },
+
+      codeSent: (String verificationId, int? resendToken) {
+        completer.complete({
+          'verificationId': verificationId,
+          'resendToken': resendToken,
+        });
+      },
+
+      codeAutoRetrievalTimeout: (_) {
+        // Timeout — manual entry on OTP page handles this, nothing to do
+      },
+    );
+
+    return completer.future;
+  }
+
+  /// Step 1b — Resend Firebase OTP using the previous [resendToken].
+  /// Returns a fresh verificationId and resendToken.
+  Future<Map<String, dynamic>> resendFirebaseOtp({
+    required String phoneNumber,
+    required int? resendToken,
+  }) async {
+    final completer = _OtpCompleter();
+
+    await _firebaseAuth.verifyPhoneNumber(
+      phoneNumber: phoneNumber,
+      timeout: const Duration(seconds: 60),
+      forceResendingToken: resendToken,
+
+      verificationCompleted: (PhoneAuthCredential credential) async {
+        await _firebaseAuth.signInWithCredential(credential);
+      },
+
+      verificationFailed: (FirebaseAuthException e) {
+        completer.completeError(e);
+      },
+
+      codeSent: (String verificationId, int? newResendToken) {
+        completer.complete({
+          'verificationId': verificationId,
+          'resendToken': newResendToken,
+        });
+      },
+
+      codeAutoRetrievalTimeout: (_) {},
+    );
+
+    return completer.future;
+  }
+
+  /// Step 2 — Verifies the OTP code the user typed against Firebase.
+  /// Returns the signed-in Firebase [User] on success.
+  /// Throws [FirebaseAuthException] on invalid/expired code.
+  Future<User> verifyFirebaseOtp({
+    required String verificationId,
+    required String smsCode,
+  }) async {
+    final credential = PhoneAuthProvider.credential(
+      verificationId: verificationId,
+      smsCode: smsCode,
+    );
+
+    final userCredential = await _firebaseAuth.signInWithCredential(credential);
+
+    final firebaseUser = userCredential.user;
+    if (firebaseUser == null) {
+      throw FirebaseAuthException(
+        code: 'null-user',
+        message: 'Firebase returned a null user after sign in.',
+      );
+    }
+
+    return firebaseUser;
+  }
+
+  /// Signs out from Firebase only — does not affect your custom backend session.
+  Future<void> signOutFirebase() async {
+    await _firebaseAuth.signOut();
+  }
+
+  /// Returns the currently signed-in Firebase user, or null if not signed in.
+  User? get firebaseCurrentUser => _firebaseAuth.currentUser;
 
   // ───────────────── EMAIL REGISTRATION ─────────────────
 
@@ -206,6 +319,26 @@ class AuthService {
   // ───────────────── LOGOUT ─────────────────
 
   Future<void> logout() async {
+    // Sign out from Firebase and clear custom backend session together
+    await signOutFirebase();
     await _storage.deleteAll();
   }
+}
+
+// ───────────────── INTERNAL HELPER ─────────────────
+// A simple Completer wrapper used to bridge Firebase's callback-based
+// verifyPhoneNumber() into a clean async/await Future.
+
+class _OtpCompleter {
+  final _completer = Completer<Map<String, dynamic>>();
+
+  void complete(Map<String, dynamic> value) {
+    if (!_completer.isCompleted) _completer.complete(value);
+  }
+
+  void completeError(Object error) {
+    if (!_completer.isCompleted) _completer.completeError(error);
+  }
+
+  Future<Map<String, dynamic>> get future => _completer.future;
 }

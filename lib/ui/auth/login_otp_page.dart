@@ -1,14 +1,21 @@
 import 'dart:async';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:wrytte/services/auth/real_number_service.dart';
 import 'package:wrytte/services/auth/auth_service.dart';
 import 'package:wrytte/ui/screens/home_screen.dart';
 
 class LoginOtpPage extends StatefulWidget {
   final String phoneNumber;
+  final String verificationId;
+  final int? resendToken;
 
-  const LoginOtpPage({super.key, required this.phoneNumber});
+  const LoginOtpPage({
+    super.key,
+    required this.phoneNumber,
+    required this.verificationId,
+    this.resendToken,
+  });
 
   @override
   State<LoginOtpPage> createState() => _LoginOtpPageState();
@@ -19,10 +26,12 @@ class _LoginOtpPageState extends State<LoginOtpPage>
   final TextEditingController _otpController = TextEditingController();
   final FocusNode _focusNode = FocusNode();
 
-  final RealNumberService _realNumberService = RealNumberService();
-
   bool _isLoading = false;
   String? _errorMessage;
+
+  // May update after a resend
+  late String _verificationId;
+  int? _resendToken;
 
   int _secondsRemaining = 60;
   bool _canResend = false;
@@ -36,6 +45,9 @@ class _LoginOtpPageState extends State<LoginOtpPage>
   @override
   void initState() {
     super.initState();
+
+    _verificationId = widget.verificationId;
+    _resendToken = widget.resendToken;
 
     _startResendTimer();
 
@@ -58,7 +70,6 @@ class _LoginOtpPageState extends State<LoginOtpPage>
   void _startResendTimer() {
     _secondsRemaining = 60;
     _canResend = false;
-
     _timer?.cancel();
 
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
@@ -71,7 +82,6 @@ class _LoginOtpPageState extends State<LoginOtpPage>
     });
   }
 
-  ///  LOGIN VERIFY OTP
   Future<void> _verifyOtp() async {
     if (!_isValid || _isLoading) return;
 
@@ -81,17 +91,37 @@ class _LoginOtpPageState extends State<LoginOtpPage>
     });
 
     try {
-      /// STEP 1: Verify OTP (LOGIN MODE)
-      final user = await AuthService.instance.registerRealPhone(
-        phone: widget.phoneNumber,
-        code: _otpController.text,
-        login: true,
+      // Step 1 — Verify OTP with Firebase
+      await AuthService.instance.verifyFirebaseOtp(
+        verificationId: _verificationId,
+        smsCode: _otpController.text,
       );
 
-      /// STEP 2: Login using returned secret
-      await AuthService.instance.login(
-        secret: user.secret,
-        userid: user.userId,
+      // Step 2 — Firebase verified, now log in via custom backend
+      // using stored credentials (secret + userId) — no OTP needed here
+      final savedUser = await AuthService.instance.getCurrentUser();
+
+      if (savedUser == null ||
+          savedUser.secret.isEmpty ||
+          savedUser.userId.isEmpty) {
+        // First time login — no stored credentials yet,
+        // just navigate to home using the Firebase phone number as identity
+        if (!mounted) return;
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(
+            builder: (_) => HomeScreen(currentUserId: widget.phoneNumber),
+          ),
+          (_) => false,
+        );
+        return;
+      }
+
+      // Returning user — log in with stored secret
+      final user = await AuthService.instance.login(
+        secret: savedUser.secret,
+        userid: savedUser.userId,
+        phone: widget.phoneNumber,
       );
 
       if (!mounted) return;
@@ -103,45 +133,73 @@ class _LoginOtpPageState extends State<LoginOtpPage>
         ),
         (_) => false,
       );
-    } catch (e) {
+    } on FirebaseAuthException catch (e) {
       _shakeController.forward(from: 0);
-
       setState(() {
-        _errorMessage = "Invalid or expired code";
+        _isLoading = false;
+        _errorMessage =
+            e.code == 'invalid-verification-code'
+                ? 'Invalid code. Please try again.'
+                : e.code == 'session-expired'
+                ? 'Code expired. Please resend.'
+                : 'Verification failed. Try again.';
         _otpController.clear();
       });
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
+    } catch (e) {
+      _shakeController.forward(from: 0);
+      setState(() {
+        _isLoading = false;
+        _errorMessage = 'Invalid or expired code.';
+        _otpController.clear();
+      });
     }
   }
 
-  /// RESEND OTP
   Future<void> _resendCode() async {
     if (!_canResend || _isLoading) return;
 
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
 
     try {
-      await _realNumberService.sendSmsCode(widget.phoneNumber);
+      // Resend via AuthService — gets a fresh verificationId + resendToken
+      final result = await AuthService.instance.resendFirebaseOtp(
+        phoneNumber: widget.phoneNumber,
+        resendToken: _resendToken,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _verificationId = result['verificationId'] as String;
+        _resendToken = result['resendToken'] as int?;
+        _isLoading = false;
+      });
+
       _startResendTimer();
-    } catch (_) {
-      if (mounted) {
-        setState(() => _errorMessage = "Failed to resend code");
-      }
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _errorMessage = e.message ?? 'Failed to resend code.';
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _errorMessage = 'Failed to resend code.';
+      });
     }
   }
 
   Widget _buildOtpBoxes() {
     return LayoutBuilder(
       builder: (context, constraints) {
-        // Calculate responsive width based on screen size
         final screenWidth = constraints.maxWidth;
-        final boxSize =
-            (screenWidth - 48) /
-            6; // 48 = total horizontal margin (6px * 8 margins)
-        final boxWidth = boxSize.clamp(36.0, 48.0); // Min 36, max 48
+        final boxSize = (screenWidth - 48) / 6;
+        final boxWidth = boxSize.clamp(36.0, 48.0);
 
         return Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -153,7 +211,7 @@ class _LoginOtpPageState extends State<LoginOtpPage>
 
             return Container(
               width: boxWidth,
-              height: boxWidth + 10, // Proportional height
+              height: boxWidth + 10,
               margin: const EdgeInsets.symmetric(horizontal: 4),
               alignment: Alignment.center,
               decoration: BoxDecoration(
@@ -218,7 +276,7 @@ class _LoginOtpPageState extends State<LoginOtpPage>
               const SizedBox(height: 10),
 
               Text(
-                "We’ve sent a code by SMS to phone\nnumber ${widget.phoneNumber}.",
+                "We've sent a code by SMS to phone\nnumber ${widget.phoneNumber}.",
                 textAlign: TextAlign.center,
                 style: const TextStyle(color: Colors.white54),
               ),
@@ -301,11 +359,21 @@ class _LoginOtpPageState extends State<LoginOtpPage>
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
                   TextButton(
-                    onPressed: _canResend ? _resendCode : null,
-                    child: const Text(
-                      "Resend SMS",
-                      style: TextStyle(color: Colors.white54),
-                    ),
+                    onPressed: _canResend && !_isLoading ? _resendCode : null,
+                    child:
+                        _isLoading
+                            ? const SizedBox(
+                              height: 14,
+                              width: 14,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white54,
+                              ),
+                            )
+                            : const Text(
+                              "Resend SMS",
+                              style: TextStyle(color: Colors.white54),
+                            ),
                   ),
                   const Text(
                     "Activate via call",
