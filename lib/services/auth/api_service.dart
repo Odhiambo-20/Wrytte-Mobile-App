@@ -4,7 +4,10 @@ import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
 
 class ApiService {
-  static const String baseUrl = "https://wryttedev.azurewebsites.net";
+  //static const String baseUrl = "https://wryttedev.azurewebsites.net";
+
+  static const String baseUrl = 
+  "https://us-central1-wrytte-app-3c029.cloudfunctions.net";
 
   // POST (x-www-form-urlencoded)
 
