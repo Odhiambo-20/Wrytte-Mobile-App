@@ -51,6 +51,33 @@ class _ChatScreenState extends State<ChatScreen> {
 
   bool _isSending = false;
 
+  // ── Message selection state ──────────────────────────────────────────────
+  bool _isMessageSelectionMode = false;
+  final Set<String> _selectedMessageIds = {};
+
+  void _onMessageLongPress(String messageId) {
+    setState(() {
+      _isMessageSelectionMode = true;
+      _selectedMessageIds.add(messageId);
+    });
+  }
+
+  void _onMessageTap(String messageId) {
+    if (!_isMessageSelectionMode) return;
+    setState(() {
+      _selectedMessageIds.contains(messageId)
+          ? _selectedMessageIds.remove(messageId)
+          : _selectedMessageIds.add(messageId);
+      if (_selectedMessageIds.isEmpty) _isMessageSelectionMode = false;
+    });
+  }
+
+  void _exitMessageSelection() => setState(() {
+        _isMessageSelectionMode = false;
+        _selectedMessageIds.clear();
+      });
+  // ────────────────────────────────────────────────────────────────────────
+
   // Header pill height — slightly larger so avatar can overflow nicely
   static const double _kHeaderPillHeight = 48.0;
   // Input pill height — thinner than header
@@ -95,17 +122,17 @@ class _ChatScreenState extends State<ChatScreen> {
     _messagesSub = _firebaseChat
         .getMessagesStream(widget.conversationId)
         .listen((messages) async {
-          await _localDb.saveMessages(messages);
-          if (!mounted) return;
-          setState(() {
-            _firebaseMessages
-              ..clear()
-              ..addAll(messages);
-          });
-          WidgetsBinding.instance.addPostFrameCallback(
-            (_) => _scrollToBottom(),
-          );
-        });
+      await _localDb.saveMessages(messages);
+      if (!mounted) return;
+      setState(() {
+        _firebaseMessages
+          ..clear()
+          ..addAll(messages);
+      });
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _scrollToBottom(),
+      );
+    });
   }
 
   Future<void> _initLegacyChat() async {
@@ -258,6 +285,9 @@ class _ChatScreenState extends State<ChatScreen> {
   // ── App bar ────────────────────────────────────────────────────────────────
 
   Widget _buildAppBar(double statusBarHeight) {
+    // ── Switch to selection bar when in selection mode ──────────────────────
+    if (_isMessageSelectionMode) return _buildSelectionBar(statusBarHeight);
+
     final String displayName = _receiverProfile?.displayName ?? widget.title;
 
     return Padding(
@@ -408,6 +438,96 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
+  // ── Selection bar — replaces app bar when messages are selected ────────────
+
+  Widget _buildSelectionBar(double statusBarHeight) {
+    return Padding(
+      padding: EdgeInsets.only(top: statusBarHeight),
+      child: SizedBox(
+        height: kToolbarHeight,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // ── Close pill ───────────────────────────────────────────
+              _glassPill(
+                width: _kHeaderPillHeight,
+                height: _kHeaderPillHeight,
+                child: const Icon(Icons.close, color: Colors.white, size: 18),
+                onTap: _exitMessageSelection,
+              ),
+
+              const SizedBox(width: 12),
+
+              // ── Selected count ───────────────────────────────────────
+              Expanded(
+                child: Text(
+                  '${_selectedMessageIds.length}',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+
+              // ── Reply pill ───────────────────────────────────────────
+              _glassPill(
+                width: _kHeaderPillHeight,
+                height: _kHeaderPillHeight,
+                child: const Icon(Icons.reply, color: Colors.white, size: 20),
+                onTap: () {}, // TODO: implement reply
+              ),
+
+              const SizedBox(width: 8),
+
+              // ── Star pill ────────────────────────────────────────────
+              _glassPill(
+                width: _kHeaderPillHeight,
+                height: _kHeaderPillHeight,
+                child: const Icon(
+                  Icons.star_border,
+                  color: Colors.white,
+                  size: 20,
+                ),
+                onTap: () {}, // TODO: implement star
+              ),
+
+              const SizedBox(width: 8),
+
+              // ── Delete pill ──────────────────────────────────────────
+              _glassPill(
+                width: _kHeaderPillHeight,
+                height: _kHeaderPillHeight,
+                child: const Icon(
+                  Icons.delete_outline,
+                  color: Colors.white,
+                  size: 20,
+                ),
+                onTap: () {}, // TODO: implement delete
+              ),
+
+              const SizedBox(width: 8),
+
+              // ── Forward pill ─────────────────────────────────────────
+              _glassPill(
+                width: _kHeaderPillHeight,
+                height: _kHeaderPillHeight,
+                child: const Icon(
+                  Icons.forward,
+                  color: Colors.white,
+                  size: 20,
+                ),
+                onTap: () {}, // TODO: implement forward
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   // ── Firebase messages ──────────────────────────────────────────────────────
 
   Widget _buildFirebaseMessages() {
@@ -436,15 +556,28 @@ class _ChatScreenState extends State<ChatScreen> {
         final prev = index > 0 ? _firebaseMessages[index - 1] : null;
         final showTail =
             prev == null || (prev.senderId == widget.currentUserId) != isMine;
+        final isSelected = _selectedMessageIds.contains(msg.id);
+
         return Column(
           children: [
             if (index == 0) _buildDateDivider('Today'),
-            MessageBubble(
-              content: msg.content,
-              time: _formatTime(msg.timestamp),
-              isMine: isMine,
-              showTail: showTail,
-              status: isMine ? msg.status : null,
+            // ── GestureDetector wraps bubble for long-press + tap ─────
+            GestureDetector(
+              onLongPress: () => _onMessageLongPress(msg.id),
+              onTap: () => _onMessageTap(msg.id),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                color: isSelected
+                    ? Colors.white.withOpacity(0.08)
+                    : Colors.transparent,
+                child: MessageBubble(
+                  content: msg.content,
+                  time: _formatTime(msg.timestamp),
+                  isMine: isMine,
+                  showTail: showTail,
+                  status: isMine ? msg.status : null,
+                ),
+              ),
             ),
           ],
         );
@@ -458,10 +591,9 @@ class _ChatScreenState extends State<ChatScreen> {
     return StreamBuilder<List<ChatMessage>>(
       stream: widget.chatState!.messagesStream,
       builder: (context, snapshot) {
-        final messages =
-            (snapshot.data ?? [])
-                .where((m) => m.conversationId == widget.conversationId)
-                .toList();
+        final messages = (snapshot.data ?? [])
+            .where((m) => m.conversationId == widget.conversationId)
+            .toList();
         WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
         return ListView.builder(
           controller: _scrollController,
@@ -475,15 +607,28 @@ class _ChatScreenState extends State<ChatScreen> {
             final showTail =
                 prev == null ||
                 (prev.senderId == widget.currentUserId) != isMine;
+            final isSelected = _selectedMessageIds.contains(msg.id);
+
             return Column(
               children: [
                 if (index == 0) _buildDateDivider('Today'),
-                MessageBubble(
-                  content: msg.content,
-                  time: _formatTime(msg.timestamp),
-                  isMine: isMine,
-                  showTail: showTail,
-                  status: isMine ? msg.status : null,
+                // ── GestureDetector wraps bubble for long-press + tap ─
+                GestureDetector(
+                  onLongPress: () => _onMessageLongPress(msg.id),
+                  onTap: () => _onMessageTap(msg.id),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 150),
+                    color: isSelected
+                        ? Colors.white.withOpacity(0.08)
+                        : Colors.transparent,
+                    child: MessageBubble(
+                      content: msg.content,
+                      time: _formatTime(msg.timestamp),
+                      isMine: isMine,
+                      showTail: showTail,
+                      status: isMine ? msg.status : null,
+                    ),
+                  ),
                 ),
               ],
             );
