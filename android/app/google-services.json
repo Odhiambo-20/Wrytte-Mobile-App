@@ -1,21 +1,21 @@
 {
   "project_info": {
-    "project_number": "25373116138",
-    "project_id": "wrytte-app",
-    "storage_bucket": "wrytte-app.firebasestorage.app"
+    "project_number": "53376040704",
+    "project_id": "wrytte-app-3c029",
+    "storage_bucket": "wrytte-app-3c029.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:25373116138:android:32be54f6566a8a85d7b993",
+        "mobilesdk_app_id": "1:53376040704:android:444a10a17e02c306a77de5",
         "android_client_info": {
-          "package_name": "com.example.wrytte"
+          "package_name": "com.example.ux"
         }
       },
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyBCjdeDzzfo0xjpGjIeJ6QGMoiJjspuwIo"
+          "current_key": "AIzaSyBHQOajqN5aSJpGV2pnoykCT0QgwL4KSIY"
         }
       ],
       "services": {
